@@ -30,6 +30,9 @@ function App() {
     hihat_vol: 0.5,
     bass_vol: 0.8,
     user_vol: 0.6,
+    delay_time: 0.3,
+    delay_feedback: 0.4,
+    delay_mix: 0.0,
     mute_texture: false,
     mute_freq: false,
     mute_beat: false,
@@ -56,7 +59,7 @@ function App() {
   const schedulerState = useRef({ nextNoteTime: 0.0, current16thNote: 0, timerID: null })
   
   const synthNodesRef = useRef({
-    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null
+    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null, delay: null, delayFeedback: null, delayMix: null
   })
   
   const layerSourcesRef = useRef({})
@@ -214,8 +217,13 @@ function App() {
       if (nodes.textureGain) {
         nodes.textureGain.gain.setTargetAtTime(params.mute_texture || params.texture_type === 'none' ? 0 : params.texture_vol, now, 0.05);
       }
+      if (nodes.delay) {
+        nodes.delay.delayTime.setTargetAtTime(params.delay_time, now, 0.05);
+        nodes.delayFeedback.gain.setTargetAtTime(params.delay_feedback, now, 0.05);
+        nodes.delayMix.gain.setTargetAtTime(params.delay_mix, now, 0.05);
+      }
     }
-  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type, params.mute_freq, params.mute_texture]);
+  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type, params.mute_freq, params.mute_texture, params.delay_time, params.delay_feedback, params.delay_mix]);
 
   // Actualizar la fuente de textura si cambia el tipo
   useEffect(() => {
@@ -290,12 +298,28 @@ function App() {
       filter.frequency.value = 20000 // default open
       filterRef.current = filter
       
+      // Setup Delay Node (Efecto Espacial)
+      const delay = audioContextRef.current.createDelay(5.0)
+      delay.delayTime.value = params.delay_time
+      const delayFeedback = audioContextRef.current.createGain()
+      delayFeedback.gain.value = params.delay_feedback
+      const delayMix = audioContextRef.current.createGain()
+      delayMix.gain.value = params.delay_mix
+      
+      delay.connect(delayFeedback)
+      delayFeedback.connect(delay)
+      delay.connect(delayMix)
+      
+      synthNodesRef.current.delay = delay
+      synthNodesRef.current.delayFeedback = delayFeedback
+      synthNodesRef.current.delayMix = delayMix
+
       // Setup 3D Spatial Panner
       const panner = audioContextRef.current.createPanner()
       panner.panningModel = 'HRTF'
       panner.positionX.value = 0
       panner.positionY.value = 0
-      panner.positionZ.value = -1
+      panner.positionZ.value = 3
 
       // 2. Setup Real-time Synth Drone (or external file)
       let externalSource = null;
@@ -377,6 +401,7 @@ function App() {
         dcOffset.start(now);
         
         synthNodesRef.current = {
+          ...synthNodesRef.current,
           carrierL, carrierR, lfo, carrierGainL, carrierGainR, lfoGain, masterGain, textureGain, dcOffset, merger
         };
 
@@ -401,7 +426,11 @@ function App() {
         }
       }
       
+      // Enrutamiento Final
+      filter.connect(delay)
       filter.connect(panner)
+      delayMix.connect(panner)
+      
       panner.connect(analyserRef.current)
       analyserRef.current.connect(audioContextRef.current.destination)
       
@@ -696,6 +725,15 @@ function App() {
             </div>
           </div>
           
+          <div className="control-group">
+            <label style={{color: 'var(--accent)'}}>Rack de Efectos (FX)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '1rem' }}>
+              <Knob label="Delay Time" value={params.delay_time} min={0.01} max={1.5} onChange={v => setParams(p => ({...p, delay_time: v}))} onMidiLearn={() => handleMidiLearn('delay_time')} midiLearnActive={activeLearnParam === 'delay_time'} />
+              <Knob label="Feedback" value={params.delay_feedback} min={0} max={0.9} onChange={v => setParams(p => ({...p, delay_feedback: v}))} onMidiLearn={() => handleMidiLearn('delay_feedback')} midiLearnActive={activeLearnParam === 'delay_feedback'} />
+              <Knob label="Delay Mix" value={params.delay_mix} min={0} max={1} onChange={v => setParams(p => ({...p, delay_mix: v}))} onMidiLearn={() => handleMidiLearn('delay_mix')} midiLearnActive={activeLearnParam === 'delay_mix'} />
+            </div>
+          </div>
+
           <div className="control-group">
             <div style={{ padding: '0.5rem', marginBottom: '1rem', background: '#111', border: '1px dashed #444', borderRadius: '4px', fontSize: '0.8rem', color: '#aaa' }}>
               <strong style={{color: 'var(--accent)'}}>Guía Rápida:</strong> Haz clic en los cuadros para crear tu patrón. Haz clic en GENERAR & PLAY para empezar a escuchar el bucle. Cambia los volúmenes en el mezclador.

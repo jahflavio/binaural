@@ -2,35 +2,6 @@
 
 ¡Bienvenido a la versión 3.0! Tu aplicación se ha transformado de un simple generador de frecuencias a un **Secuenciador y Looper para directo**. Aquí tienes cómo aprovechar todas las nuevas funciones.
 
-## Cómo iniciar el sistema
-
-### Método Rápido (Recomendado)
-Para simplificar el inicio en Windows, simplemente haz doble clic en el archivo `start.bat` que se encuentra en la carpeta principal del proyecto.
-Esto abrirá automáticamente dos ventanas (una para el backend de Python y otra para el frontend de React) y las iniciará por ti. 
-
-La aplicación se abrirá en tu navegador en la dirección `http://localhost:5173`.
-
-*(Nota: La primera vez que lo ejecutes o si hay actualizaciones, el frontend y backend descargarán sus dependencias).*
-
-### Método Manual
-Si prefieres iniciar el sistema manualmente, necesitas usar dos terminales:
-
-**Terminal 1 (Backend - Motor de Audio):**
-```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn server:app --reload --port 8000
-```
-
-**Terminal 2 (Frontend - Interfaz de Usuario):**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
 ## 1. El Secuenciador de 16 Pasos (Caja de Ritmo)
 En el panel lateral verás una nueva cuadrícula de 16 botones para **KICK** (Bombo rojo) y **GLITCH** (Ruido cyan).
 - **Cómo usarlo**: Haz clic en los pequeños bloques para encenderlos o apagarlos. Representan los 16 tiempos de un compás.

@@ -21,16 +21,18 @@
 - **Componente `<Knob />` Personalizado:** Desarrollado desde cero con lógica de arrastre en el eje Y y rotación CSS matemática. Sustituye todos los *sliders* nativos.
 - **Visuales Oscuros:** Ajustes en Sombras, *Box-Shadows* y colores neón que dan un aspecto de mesa de mezclas profesional, integrándose perfectamente con el Torus Knot en 3D del visualizador.
 
-### 5. Refactorización a Síntesis en Tiempo Real (Web Audio API)
-- **Migración de DSP al Navegador:** Para resolver el problema de latencia y permitir que las perillas controlen el sonido instantáneamente, el tono base (Drone), la modulación de amplitud (Latido Isocrónico) y las texturas (Ruido Rosa y Lluvia) ahora se sintetizan en tiempo real directamente en React utilizando `OscillatorNode`, `GainNode` y `BiquadFilterNode`.
-- **Cero Latencia en Perillas:** Los `useEffect` monitorean los cambios de estado de las perillas e inyectan los nuevos valores (`setTargetAtTime`) directamente a los nodos de audio mientras están sonando, eliminando la necesidad de re-generar el archivo desde Python para escuchar cambios en las frecuencias.
-- **División de Trabajo Optimizada:** Python (`server.py`) ahora se encarga exclusivamente de las tareas complejas de procesamiento de audio externo (Pitch Shifting a 432Hz) y de renderizar los *one-shots* analógicos para el bombo y glitch de la caja de ritmos.
+### 5. Fase 5 Completada: Arquitectura en Tiempo Real y Modularización
+- **Scheduler de Precisión:** El frontend ya no depende de Python para mezclar los golpes del secuenciador. Ahora usa un sistema de *Lookahead* en Javascript para disparar *One-Shots* sincronizados con extrema precisión usando `AudioContext.currentTime`.
+- **Modularización (Fase 5.3):** Se eliminó el código "espagueti" del archivo monolítico `App.jsx`, extrayendo la interfaz a componentes reutilizables dentro de `src/components/`:
+  - `Knob.jsx`
+  - `SequencerGrid.jsx`
+  - `Visualizer3D.jsx`
 
 ## 🧪 Próximos Pasos Recomendados (Testing)
-1. Inicia el servidor con tu nuevo `start.bat`.
-2. Presiona `[ GENERAR & PLAY ]` para arrancar el motor de audio y la caja de ritmos.
-3. Mueve la perilla **BPM** y notarás cómo la batería acelera al instante.
-4. Mueve las perillas **Frec. Base** o **Isocrónico** y escucharás cómo el tono principal cambia fluidamente, como en un sintetizador real.
-5. Cambia entre Texturas (Ruido Rosa/Lluvia) o mutea loops mientras tocas en vivo.
+1. Inicia el servidor de Python con `uvicorn server:app --reload`.
+2. Lanza el servidor frontend (`npm run dev`).
+3. Prueba el Secuenciador dibujando un ritmo complejo.
+4. Asigna un control de tu caja Boss haciendo doble clic en el Knob de "Vol Textura".
+5. ¡Empieza a loopear en directo!
 
-*Consulta la [Guía de Uso](file:///c:/Users/fabia/OneDrive/Documentos/audio/docs/guia_de_uso.md) para detalles sobre el inicio.*
+*Consulta la [Guía de Uso](file:///C:/Users/fabia/.gemini/antigravity-ide/brain/8f99b85e-bd4a-4df6-bee9-6eac03970de4/guia_de_uso.md) y la [Auditoría de Proyecto](file:///C:/Users/fabia/.gemini/antigravity-ide/brain/8f99b85e-bd4a-4df6-bee9-6eac03970de4/audit_and_opinions.md) para más detalles.*

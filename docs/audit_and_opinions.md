@@ -23,7 +23,7 @@
 
 ### 🏁 Deuda Técnica Resuelta:
 - **Estado Bloqueante:** Se eliminó el problema de tener que detener y volver a "Generar".
-- **Refactorización Preparada:** Todo el estado rítmico fluye desde referencias dinámicas (`useRef(params)`), permitiendo a React despachar actualizaciones UI (como los Knobs o MIDI Learn) sin desmontar los nodos de audio.
+- **Refactorización de Código Espagueti:** En la Fase 5.3 se modularizó exitosamente la interfaz. Se extrajeron los componentes `Knob.jsx`, `SequencerGrid.jsx` y `Visualizer3D.jsx` del archivo monolítico `App.jsx`, reduciendo drásticamente su tamaño y complejidad. Esto hace que el proyecto sea infinitamente más mantenible y escalable.
 
 ---
 
@@ -34,7 +34,7 @@ Desde una perspectiva técnica, has transformado un script estático en una **Es
 La fusión de la **estética Raster-Noton** (colores oscuros, Knobs 3D, malla de Wireframe reaccionando a los graves) con la **ciencia somática** (pulsos isocrónicos y offsets binaurales paramétricos) hace de *BioSync DSP* una herramienta única, muy por delante de generadores comunes de "ruido blanco".
 
 **Siguientes horizontes posibles (Para el futuro):**
-1. **Componentización de React:** Aunque el código funciona perfecto, en una Fase 6 podríamos separar el archivo gigante `App.jsx` en múltiples archivos (ej. `Sequencer.jsx`, `Looper.jsx`) para que sea más fácil para otros programadores colaborar en tu proyecto.
-2. **Exportación Multipista:** Permitir descargar no solo la sesión "Master", sino los *stems* separados (Textura, Glitch, y Kicks) para mezclarlos luego en Ableton Live.
+1. **Exportación Multipista:** Permitir descargar no solo la sesión "Master", sino los *stems* separados (Textura, Glitch, y Kicks) para mezclarlos luego en Ableton Live.
+2. **Soporte de WebMIDI avanzado:** Permitir enviar *Clock* MIDI externo hacia sintetizadores de hardware (para que tu Boss se sincronice con el tempo de la web).
 
 ¡Por ahora, la aplicación es robusta, rápida y está lista para que la conectes a tu hardware Boss en vivo!

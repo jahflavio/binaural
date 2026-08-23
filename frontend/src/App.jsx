@@ -5,6 +5,7 @@ import './App.css'
 import Knob from './components/Knob'
 import SequencerGrid from './components/SequencerGrid'
 import Visualizer3D from './components/Visualizer3D'
+import { audioBufferToWav } from './utils/wavExporter'
 
 function App() {
   const [params, setParams] = useState({
@@ -62,6 +63,8 @@ function App() {
   const chaosPadRef = useRef(null)
   const requestRef = useRef(null)
   const isDragging = useRef(false)
+  const midiOutputsRef = useRef([])
+  const clockIntervalRef = useRef(null)
 
   // Setup Web MIDI API
   useEffect(() => {
@@ -71,6 +74,10 @@ function App() {
     
     function onMIDISuccess(midiAccess) {
       console.log("MIDI Listo. Esperando eventos...")
+      const outputs = []
+      midiAccess.outputs.forEach(port => outputs.push(port))
+      midiOutputsRef.current = outputs
+      
       for (let input of midiAccess.inputs.values()) {
         input.onmidimessage = getMIDIMessage
       }
@@ -114,6 +121,26 @@ function App() {
       }
     }
   }, [])
+
+  // UseEffect to update MIDI Clock when BPM changes or playback starts/stops
+  useEffect(() => {
+    if (clockIntervalRef.current) {
+      clearInterval(clockIntervalRef.current)
+      clockIntervalRef.current = null
+    }
+    
+    if (isPlaying) {
+      // 24 PPQN (Pulses Per Quarter Note)
+      const intervalMs = 60000 / (params.bpm * 24)
+      clockIntervalRef.current = setInterval(() => {
+        midiOutputsRef.current.forEach(port => port.send([0xF8])) // MIDI Clock Tick
+      }, intervalMs)
+    }
+    
+    return () => {
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current)
+    }
+  }, [isPlaying, params.bpm])
   
   const handleMidiLearn = (paramName) => {
     midiLearnRef.current = { active: true, param: paramName }
@@ -201,11 +228,6 @@ function App() {
     }
   }, [isPlaying, params.texture_type]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setParams(prev => ({ ...prev, [name]: parseFloat(value) }))
-  }
-
   const applyPreset = (preset) => {
     if (preset === 'vagal') {
       setParams(p => ({ ...p, carrier_freq: 80, isochronic_beat: 4, kick_freq: 40, bpm: 90 }))
@@ -221,13 +243,16 @@ function App() {
   }
 
   const generateAndPlay = async () => {
+    if (isPlaying) return
+    setIsPlaying(true)
+    
+    // Send MIDI Start
+    midiOutputsRef.current.forEach(port => port.send([0xFA]))
+
     if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
       await audioContextRef.current.resume()
     }
     setIsLoading(true)
-    
-    // Stop current audio if playing
-    stopAudio()
     
     try {
       // 1. Fetch One-Shots for the sequencer
@@ -355,11 +380,8 @@ function App() {
            synthNodesRef.current.textureSource = tSrc;
         }
 
-        // Dummy sourceRef for Chaos Pad pitch manipulation (which manipulates playbackRate of external audio or just filter)
-        // Since we are synthesizing, Chaos Pad will only affect the filter for the drone.
-        // If we want Chaos Pad to affect pitch of oscillators, we'd need to update updateChaosPad logic.
         sourceRef.current = {
-           playbackRate: { setTargetAtTime: () => {} }, // mock
+           playbackRate: { setTargetAtTime: () => {} },
            stop: () => {
              try { carrierL.stop(); carrierR.stop(); lfo.stop(); dcOffset.stop(); } catch(e){}
              if (synthNodesRef.current.textureSource) {
@@ -369,12 +391,10 @@ function App() {
         }
       }
       
-      // Connect: filter -> panner -> analyser -> destination (speakers)
       filter.connect(panner)
       panner.connect(analyserRef.current)
       analyserRef.current.connect(audioContextRef.current.destination)
       
-      // Setup MediaStreamDestination for Live Recording
       const streamDest = audioContextRef.current.createMediaStreamDestination()
       analyserRef.current.connect(streamDest)
       
@@ -395,7 +415,6 @@ function App() {
       }
       mediaRecorderRef.current = mediaRecorder
       
-      // Start Looper Layers
       layers.forEach(layer => {
         if (layer.isMuted) return
         const source = audioContextRef.current.createBufferSource()
@@ -406,11 +425,8 @@ function App() {
         layerSourcesRef.current[layer.id] = source
       })
 
-      // Setup Scheduler Functions
       const scheduleNote = (beatNumber, time) => {
         const currentParams = paramsRef.current;
-        
-        // Kick
         if (currentParams.kick_pattern[beatNumber] === 1 && audioBuffers.current.kick) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.kick
@@ -420,8 +436,6 @@ function App() {
           gain.connect(filter)
           src.start(time)
         }
-        
-        // Snare
         if (currentParams.snare_pattern[beatNumber] === 1 && audioBuffers.current.snare) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.snare
@@ -431,8 +445,6 @@ function App() {
           gain.connect(filter)
           src.start(time)
         }
-
-        // HiHat
         if (currentParams.hihat_pattern[beatNumber] === 1 && audioBuffers.current.hihat) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.hihat
@@ -442,8 +454,6 @@ function App() {
           gain.connect(filter)
           src.start(time)
         }
-        
-        // Glitch
         if (currentParams.glitch_pattern[beatNumber] === 1 && audioBuffers.current.glitch) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.glitch
@@ -462,7 +472,7 @@ function App() {
       }
 
       const scheduler = () => {
-        if (!audioContextRef.current || !sourceRef.current) return // detiene el bucle si no hay fuente (se apagó)
+        if (!audioContextRef.current || !sourceRef.current) return 
         while (schedulerState.current.nextNoteTime < audioContextRef.current.currentTime + 0.1) {
           scheduleNote(schedulerState.current.current16thNote, schedulerState.current.nextNoteTime)
           nextNote()
@@ -470,12 +480,9 @@ function App() {
         schedulerState.current.timerID = setTimeout(scheduler, 25.0)
       }
 
-      // Start Scheduler
       schedulerState.current.current16thNote = 0
       schedulerState.current.nextNoteTime = audioContextRef.current.currentTime + 0.05
       
-      setIsPlaying(true)
-      // Ejecutamos el scheduler después de que el estado cambie
       setTimeout(scheduler, 0)
       
     } catch (error) {
@@ -487,11 +494,11 @@ function App() {
   }
 
   const stopAudio = () => {
+    setIsPlaying(false)
     if (sourceRef.current) {
       if (schedulerState.current.timerID) clearTimeout(schedulerState.current.timerID)
       try { sourceRef.current.stop() } catch(e){}
       sourceRef.current = null;
-      setIsPlaying(false)
       if (isRecording && mediaRecorderRef.current) {
         mediaRecorderRef.current.stop()
         setIsRecording(false)
@@ -501,6 +508,24 @@ function App() {
       })
       layerSourcesRef.current = {}
     }
+    
+    // Send MIDI Stop
+    midiOutputsRef.current.forEach(port => port.send([0xFC]))
+  }
+
+  const exportWavStems = () => {
+    layers.forEach((layer, index) => {
+      const wavBuffer = audioBufferToWav(layer.buffer)
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      a.download = `biosync_stem_${index + 1}.wav`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
   }
 
   const handleRecord = () => {
@@ -545,31 +570,21 @@ function App() {
     if (!chaosPadRef.current || !sourceRef.current || !filterRef.current || !audioContextRef.current) return
     
     const rect = chaosPadRef.current.getBoundingClientRect()
-    // Normalize coordinates from 0 to 1
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-    
-    // Mapear Eje X a Pitch (playbackRate): 0.5x a 1.5x (1.0 es el centro)
     const pitch = 0.5 + (x * 1.0)
-    
-    // Mapear Eje Y a Filtro (Lowpass Frequency): Invertido, arriba es abierto (20000Hz), abajo es cerrado (200Hz)
-    // Usamos escala exponencial para frecuencias
     const minFreq = 200
     const maxFreq = 20000
-    // y=0 (top) -> maxFreq, y=1 (bottom) -> minFreq
     const freq = minFreq * Math.pow(maxFreq / minFreq, 1 - y)
     
     const now = audioContextRef.current.currentTime
-    // Usar setTargetAtTime para suavizar el movimiento (time constant 0.05s)
     sourceRef.current.playbackRate.setTargetAtTime(pitch, now, 0.05)
     filterRef.current.frequency.setTargetAtTime(freq, now, 0.05)
   }
 
   const resetChaosPad = () => {
     if (!sourceRef.current || !filterRef.current || !audioContextRef.current) return
-    
     const now = audioContextRef.current.currentTime
-    // Resorte suave de vuelta a la normalidad (time constant 0.2s)
     sourceRef.current.playbackRate.setTargetAtTime(1.0, now, 0.2)
     filterRef.current.frequency.setTargetAtTime(20000, now, 0.2)
   }
@@ -662,6 +677,16 @@ function App() {
                   </button>
                 </div>
               ))}
+              <div style={{ marginTop: '1rem', borderTop: '1px solid #333', paddingTop: '1rem' }}>
+                <button 
+                  onClick={exportWavStems}
+                  disabled={layers.length === 0}
+                  className="action-btn mono"
+                  style={{ width: '100%', borderColor: '#00ccff', color: '#00ccff', background: '#00ccff22' }}
+                >
+                  💾 DESCARGAR STEMS (.WAV)
+                </button>
+              </div>
             </div>
           )}
 

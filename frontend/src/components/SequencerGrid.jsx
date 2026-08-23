@@ -1,9 +1,27 @@
 import React from 'react';
+import { generateRandomEuclidean } from '../utils/euclidean';
 
 const SequencerGrid = ({ params, setParams }) => {
   return (
     <>
-      <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Secuenciador 16 Pasos (Caja de Ritmo)</label>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
+        <label style={{color: 'var(--accent)', display: 'block'}}>Secuenciador 16 Pasos (Caja de Ritmo)</label>
+        <button 
+          onClick={() => {
+            const newPatterns = generateRandomEuclidean(16);
+            setParams(p => ({
+              ...p,
+              kick_pattern: newPatterns.kick_pattern,
+              snare_pattern: newPatterns.snare_pattern,
+              hihat_pattern: newPatterns.hihat_pattern,
+              glitch_pattern: newPatterns.glitch_pattern,
+              bass_pattern: newPatterns.bass_pattern
+            }));
+          }}
+          style={{ background: '#331111', color: '#ff4444', border: '1px solid #ff4444', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 'bold' }}>
+          🎲 CAOS EUCLIDIANO
+        </button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '0.5rem', alignItems: 'center' }}>
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

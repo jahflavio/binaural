@@ -33,13 +33,17 @@ function App() {
     delay_time: 0.3,
     delay_feedback: 0.4,
     delay_mix: 0.0,
+    reverb_time: 2.5,
+    reverb_mix: 0.0,
     mute_texture: false,
     mute_freq: false,
     mute_beat: false,
     mute_glitch: false,
     mute_snare: false,
     mute_hihat: false,
-    mute_bass: false
+    mute_bass: false,
+    auto_lfo: false,
+    midi_slave: false
   })
   
   const [selectedFile, setSelectedFile] = useState(null)
@@ -57,9 +61,12 @@ function App() {
   const audioBuffers = useRef({ kick: null, glitch: null, snare: null, hihat: null })
   const lastFetchedKickFreq = useRef(null)
   const schedulerState = useRef({ nextNoteTime: 0.0, current16thNote: 0, timerID: null })
+  const scheduleNoteRef = useRef(null)
+  const isPlayingRef = useRef(false)
+  const midiTicksCountRef = useRef(0)
   
   const synthNodesRef = useRef({
-    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null, delay: null, delayFeedback: null, delayMix: null
+    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null, delay: null, delayFeedback: null, delayMix: null, convolver: null, reverbMix: null
   })
   
   const layerSourcesRef = useRef({})
@@ -102,6 +109,21 @@ function App() {
     
     function getMIDIMessage(message) {
       const command = message.data[0]
+      
+      // Handle MIDI Clock for Slave Mode
+      if (command === 0xF8 && paramsRef.current.midi_slave && isPlayingRef.current) {
+        midiTicksCountRef.current++;
+        if (midiTicksCountRef.current >= 6) { // 24 PPQN / 4 = 6 ticks por semicorchea
+          midiTicksCountRef.current = 0;
+          const now = audioContextRef.current ? audioContextRef.current.currentTime : 0;
+          if (scheduleNoteRef.current) {
+            scheduleNoteRef.current(schedulerState.current.current16thNote, now);
+          }
+          schedulerState.current.current16thNote = (schedulerState.current.current16thNote + 1) % 16;
+        }
+        return;
+      }
+      
       const note = message.data[1]
       const velocity = (message.data.length > 2) ? message.data[2] : 0 
       
@@ -135,14 +157,14 @@ function App() {
     }
   }, [])
 
-  // UseEffect to update MIDI Clock when BPM changes or playback starts/stops
+  // UseEffect to update MIDI Clock when BPM changes or playback starts/stops (Solo si es Master)
   useEffect(() => {
     if (clockIntervalRef.current) {
       clearInterval(clockIntervalRef.current)
       clockIntervalRef.current = null
     }
     
-    if (isPlaying) {
+    if (isPlaying && !params.midi_slave) {
       // 24 PPQN (Pulses Per Quarter Note)
       const intervalMs = 60000 / (params.bpm * 24)
       clockIntervalRef.current = setInterval(() => {
@@ -153,14 +175,14 @@ function App() {
     return () => {
       if (clockIntervalRef.current) clearInterval(clockIntervalRef.current)
     }
-  }, [isPlaying, params.bpm])
+  }, [isPlaying, params.bpm, params.midi_slave])
   
   const handleMidiLearn = (paramName) => {
     midiLearnRef.current = { active: true, param: paramName }
     setActiveLearnParam(paramName)
   }
 
-  // Initialize Web Audio API
+  // Inicializar Web Audio API y Analyser
   useEffect(() => {
     // Setup Audio Context
     const AudioContext = window.AudioContext || window.webkitAudioContext
@@ -172,6 +194,45 @@ function App() {
       if (audioContextRef.current) audioContextRef.current.close()
     }
   }, [])
+
+  // Auto-LFO Logic
+  useEffect(() => {
+    if (!params.auto_lfo) return;
+    
+    let animationFrame;
+    let startTime = performance.now();
+    
+    const animate = (time) => {
+      const elapsed = (time - startTime) / 1000;
+      // Oscillate Binaural Offset between 0 and 15Hz over 20 seconds
+      const lfoOffset = (Math.sin(elapsed * Math.PI * 2 / 20) + 1) * 7.5; 
+      
+      setParams(p => {
+        // Only update if it actually changed significantly to avoid spamming re-renders
+        if (Math.abs(p.binaural_offset - lfoOffset) > 0.1) {
+          return { ...p, binaural_offset: lfoOffset };
+        }
+        return p;
+      });
+      animationFrame = requestAnimationFrame(animate);
+    };
+    
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [params.auto_lfo]);
+
+  const generateImpulseResponse = (ctx, duration, decay) => {
+    const length = ctx.sampleRate * duration;
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+    const left = impulse.getChannelData(0);
+    const right = impulse.getChannelData(1);
+    for (let i = 0; i < length; i++) {
+      const n = (1 - i / length) ** decay;
+      left[i] = (Math.random() * 2 - 1) * n;
+      right[i] = (Math.random() * 2 - 1) * n;
+    }
+    return impulse;
+  };
 
   const createNoiseBuffer = (type) => {
     if (!audioContextRef.current) return null;
@@ -222,8 +283,11 @@ function App() {
         nodes.delayFeedback.gain.setTargetAtTime(params.delay_feedback, now, 0.05);
         nodes.delayMix.gain.setTargetAtTime(params.delay_mix, now, 0.05);
       }
+      if (nodes.reverbMix) {
+        nodes.reverbMix.gain.setTargetAtTime(params.reverb_mix, now, 0.05);
+      }
     }
-  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type, params.mute_freq, params.mute_texture, params.delay_time, params.delay_feedback, params.delay_mix]);
+  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type, params.mute_freq, params.mute_texture, params.delay_time, params.delay_feedback, params.delay_mix, params.reverb_mix]);
 
   // Actualizar la fuente de textura si cambia el tipo
   useEffect(() => {
@@ -261,18 +325,18 @@ function App() {
   }
 
   const generateAndPlay = async () => {
-    if (isPlaying) return
-    setIsPlaying(true)
-    
-    // Send MIDI Start
-    midiOutputsRef.current.forEach(port => port.send([0xFA]))
-
-    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-      await audioContextRef.current.resume()
-    }
-    setIsLoading(true)
-    
     try {
+      setIsLoading(true)
+      isPlayingRef.current = true
+      setIsPlaying(true)
+      
+      // Send MIDI Start
+      midiOutputsRef.current.forEach(port => port.send([0xFA]))
+
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume()
+      }
+    
       // 1. Fetch One-Shots for the sequencer
       if (!audioBuffers.current.kick || lastFetchedKickFreq.current !== params.kick_freq) {
         const kickRes = await fetch(`http://127.0.0.1:8080/generate/kick?kick_freq=${params.kick_freq}`)
@@ -313,6 +377,17 @@ function App() {
       synthNodesRef.current.delay = delay
       synthNodesRef.current.delayFeedback = delayFeedback
       synthNodesRef.current.delayMix = delayMix
+
+      // Setup Reverb Node (Convolver)
+      const convolver = audioContextRef.current.createConvolver()
+      convolver.buffer = generateImpulseResponse(audioContextRef.current, params.reverb_time, 2.0)
+      const reverbMix = audioContextRef.current.createGain()
+      reverbMix.gain.value = params.reverb_mix
+      
+      convolver.connect(reverbMix)
+      
+      synthNodesRef.current.convolver = convolver
+      synthNodesRef.current.reverbMix = reverbMix
 
       // Setup 3D Spatial Panner
       const panner = audioContextRef.current.createPanner()
@@ -428,8 +503,11 @@ function App() {
       
       // Enrutamiento Final
       filter.connect(delay)
+      filter.connect(convolver) // Enviar al reverb también
       filter.connect(panner)
+      
       delayMix.connect(panner)
+      reverbMix.connect(panner)
       
       panner.connect(analyserRef.current)
       analyserRef.current.connect(audioContextRef.current.destination)
@@ -528,6 +606,8 @@ function App() {
           osc.stop(time + 0.5)
         }
       }
+      
+      scheduleNoteRef.current = scheduleNote;
 
       const nextNote = () => {
         const secondsPerBeat = 60.0 / paramsRef.current.bpm
@@ -537,9 +617,11 @@ function App() {
 
       const scheduler = () => {
         if (!audioContextRef.current || !sourceRef.current) return 
-        while (schedulerState.current.nextNoteTime < audioContextRef.current.currentTime + 0.1) {
-          scheduleNote(schedulerState.current.current16thNote, schedulerState.current.nextNoteTime)
-          nextNote()
+        if (!paramsRef.current.midi_slave) {
+          while (schedulerState.current.nextNoteTime < audioContextRef.current.currentTime + 0.1) {
+            scheduleNote(schedulerState.current.current16thNote, schedulerState.current.nextNoteTime)
+            nextNote()
+          }
         }
         schedulerState.current.timerID = setTimeout(scheduler, 25.0)
       }
@@ -559,6 +641,8 @@ function App() {
 
   const stopAudio = () => {
     setIsPlaying(false)
+    isPlayingRef.current = false
+    midiTicksCountRef.current = 0
     if (sourceRef.current) {
       if (schedulerState.current.timerID) clearTimeout(schedulerState.current.timerID)
       try { sourceRef.current.stop() } catch(e){}
@@ -727,15 +811,63 @@ function App() {
           
           <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Rack de Efectos (FX)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginTop: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem', marginTop: '1rem' }}>
               <Knob label="Delay Time" value={params.delay_time} min={0.01} max={1.5} onChange={v => setParams(p => ({...p, delay_time: v}))} onMidiLearn={() => handleMidiLearn('delay_time')} midiLearnActive={activeLearnParam === 'delay_time'} />
               <Knob label="Feedback" value={params.delay_feedback} min={0} max={0.9} onChange={v => setParams(p => ({...p, delay_feedback: v}))} onMidiLearn={() => handleMidiLearn('delay_feedback')} midiLearnActive={activeLearnParam === 'delay_feedback'} />
               <Knob label="Delay Mix" value={params.delay_mix} min={0} max={1} onChange={v => setParams(p => ({...p, delay_mix: v}))} onMidiLearn={() => handleMidiLearn('delay_mix')} midiLearnActive={activeLearnParam === 'delay_mix'} />
+              
+              <Knob label="Reverb Time" value={params.reverb_time} min={0.5} max={10.0} onChange={v => {
+                setParams(p => ({...p, reverb_time: v}));
+                // Regenerar buffer en vivo si cambia mucho
+                if (synthNodesRef.current.convolver && audioContextRef.current) {
+                  synthNodesRef.current.convolver.buffer = generateImpulseResponse(audioContextRef.current, v, 2.0);
+                }
+              }} onMidiLearn={() => handleMidiLearn('reverb_time')} midiLearnActive={activeLearnParam === 'reverb_time'} />
+              
+              <Knob label="Reverb Mix" value={params.reverb_mix} min={0} max={1} onChange={v => setParams(p => ({...p, reverb_mix: v}))} onMidiLearn={() => handleMidiLearn('reverb_mix')} midiLearnActive={activeLearnParam === 'reverb_mix'} />
             </div>
           </div>
 
           <div className="control-group">
-            <div style={{ padding: '0.5rem', marginBottom: '1rem', background: '#111', border: '1px dashed #444', borderRadius: '4px', fontSize: '0.8rem', color: '#aaa' }}>
+            <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', textAlign: 'center' }}>
+              <button 
+                onClick={() => setParams(p => ({...p, auto_lfo: !p.auto_lfo}))}
+                style={{ 
+                  background: params.auto_lfo ? '#ff4444' : '#333', 
+                  color: '#fff', 
+                  border: '1px solid #555', 
+                  padding: '8px 16px', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  width: '100%'
+                }}
+              >
+                {params.auto_lfo ? "LFO: ACTIVO" : "AUTO LFO"}
+              </button>
+              <div style={{ fontSize: '0.65rem', color: '#aaa', marginTop: '0.5rem' }}>Automatiza la perilla Binaural suavemente</div>
+            </div>
+            
+            <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', textAlign: 'center', marginTop: '1rem' }}>
+              <button 
+                onClick={() => setParams(p => ({...p, midi_slave: !p.midi_slave}))}
+                style={{ 
+                  background: params.midi_slave ? '#4444ff' : '#333', 
+                  color: '#fff', 
+                  border: '1px solid #555', 
+                  padding: '8px 16px', 
+                  borderRadius: '4px', 
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  width: '100%'
+                }}
+              >
+                {params.midi_slave ? "CLOCK: SLAVE (EXT)" : "CLOCK: MASTER (INT)"}
+              </button>
+              <div style={{ fontSize: '0.65rem', color: '#aaa', marginTop: '0.5rem' }}>Master = Domina Hardware | Slave = Obedece Hardware</div>
+            </div>
+            
+            <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', marginTop: '1rem' }}>
               <strong style={{color: 'var(--accent)'}}>Guía Rápida:</strong> Haz clic en los cuadros para crear tu patrón. Haz clic en GENERAR & PLAY para empezar a escuchar el bucle. Cambia los volúmenes en el mezclador.
             </div>
             

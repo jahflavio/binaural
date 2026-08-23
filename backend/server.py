@@ -181,6 +181,28 @@ def generate_glitch_oneshot():
     buffer.seek(0)
     return Response(content=buffer.getvalue(), media_type="audio/wav")
 
+@app.get("/generate/snare")
+def generate_snare_oneshot():
+    # Genera solo 1 golpe de snare (0.25s) + padding
+    engine = BioSyncEngine()
+    layer = engine.generate_snare_layer(duration=0.3, pattern=[1])
+    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
+    buffer = io.BytesIO()
+    wavfile.write(buffer, engine.sample_rate, layer_16)
+    buffer.seek(0)
+    return Response(content=buffer.getvalue(), media_type="audio/wav")
+
+@app.get("/generate/hihat")
+def generate_hihat_oneshot():
+    # Genera solo 1 golpe de hihat (0.1s) + padding
+    engine = BioSyncEngine()
+    layer = engine.generate_hihat_layer(duration=0.2, pattern=[1])
+    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
+    buffer = io.BytesIO()
+    wavfile.write(buffer, engine.sample_rate, layer_16)
+    buffer.seek(0)
+    return Response(content=buffer.getvalue(), media_type="audio/wav")
+
 @app.get("/generate/drone")
 def generate_drone(
     duration: int = 15,

@@ -63,11 +63,15 @@ function App() {
     kick_freq: 55.5,
     kick_pattern: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
     glitch_pattern: [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0],
+    snare_pattern: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    hihat_pattern: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
     texture_type: 'none',
     texture_vol: 0.5,
     freq_vol: 0.5,
     beat_vol: 0.8,
     glitch_vol: 0.4,
+    snare_vol: 0.6,
+    hihat_vol: 0.5,
     user_vol: 0.6
   })
   
@@ -83,8 +87,13 @@ function App() {
   useEffect(() => { paramsRef.current = params }, [params])
   
   const audioContextRef = useRef(null)
-  const audioBuffers = useRef({ kick: null, glitch: null })
+  const audioBuffers = useRef({ kick: null, glitch: null, snare: null, hihat: null })
+  const lastFetchedKickFreq = useRef(null)
   const schedulerState = useRef({ nextNoteTime: 0.0, current16thNote: 0, timerID: null })
+  
+  const synthNodesRef = useRef({
+    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null
+  })
   
   const layerSourcesRef = useRef({})
   const midiMapRef = useRef({})
@@ -265,6 +274,74 @@ function App() {
     }
   }, [])
 
+  const createNoiseBuffer = (type) => {
+    if (!audioContextRef.current) return null;
+    const bufferSize = audioContextRef.current.sampleRate * 5; // 5 seconds
+    const buffer = audioContextRef.current.createBuffer(1, bufferSize, audioContextRef.current.sampleRate);
+    const output = buffer.getChannelData(0);
+    if (type === 'pink') {
+      let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+      for (let i = 0; i < bufferSize; i++) {
+        let white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555179;
+        b1 = 0.99332 * b1 + white * 0.0750759;
+        b2 = 0.96900 * b2 + white * 0.1538520;
+        b3 = 0.86650 * b3 + white * 0.3104856;
+        b4 = 0.55000 * b4 + white * 0.5329522;
+        b5 = -0.7616 * b5 - white * 0.0168980;
+        output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+        output[i] *= 0.11;
+        b6 = white * 0.115926;
+      }
+    } else if (type === 'rain') {
+       let lastOut = 0;
+       for (let i = 0; i < bufferSize; i++) {
+         let white = Math.random() * 2 - 1;
+         output[i] = (lastOut + (0.02 * white)) / 1.02;
+         lastOut = output[i];
+         output[i] *= 3.5;
+       }
+    }
+    return buffer;
+  }
+
+  // Actualizar parámetros de los osciladores en tiempo real
+  useEffect(() => {
+    if (!isPlaying) return;
+    const nodes = synthNodesRef.current;
+    if (nodes.carrierL && audioContextRef.current) {
+      const now = audioContextRef.current.currentTime;
+      nodes.carrierL.frequency.setTargetAtTime(params.carrier_freq, now, 0.05);
+      nodes.carrierR.frequency.setTargetAtTime(params.carrier_freq + params.binaural_offset, now, 0.05);
+      nodes.lfo.frequency.setTargetAtTime(params.isochronic_beat, now, 0.05);
+      nodes.masterGain.gain.setTargetAtTime(params.freq_vol, now, 0.05);
+      if (nodes.textureGain) {
+        nodes.textureGain.gain.setTargetAtTime(params.texture_type !== 'none' ? params.texture_vol : 0, now, 0.05);
+      }
+    }
+  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type]);
+
+  // Actualizar la fuente de textura si cambia el tipo
+  useEffect(() => {
+    if (!isPlaying) return;
+    const nodes = synthNodesRef.current;
+    if (nodes.textureSource) {
+      try { nodes.textureSource.stop(); nodes.textureSource.disconnect(); } catch(e){}
+      nodes.textureSource = null;
+    }
+    if (params.texture_type !== 'none' && nodes.textureGain) {
+      const noiseBuffer = createNoiseBuffer(params.texture_type);
+      if (noiseBuffer) {
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = noiseBuffer;
+        source.loop = true;
+        source.connect(nodes.textureGain);
+        source.start();
+        nodes.textureSource = source;
+      }
+    }
+  }, [isPlaying, params.texture_type]);
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setParams(prev => ({ ...prev, [name]: parseFloat(value) }))
@@ -291,53 +368,28 @@ function App() {
     setIsLoading(true)
     
     // Stop current audio if playing
-    if (sourceRef.current) {
-      sourceRef.current.stop()
-      sourceRef.current.disconnect()
-    }
+    stopAudio()
     
     try {
-      let droneBuffer;
-      
       // 1. Fetch One-Shots for the sequencer
-      if (!audioBuffers.current.kick) {
+      if (!audioBuffers.current.kick || lastFetchedKickFreq.current !== params.kick_freq) {
         const kickRes = await fetch(`http://127.0.0.1:8000/generate/kick?kick_freq=${params.kick_freq}`)
         audioBuffers.current.kick = await audioContextRef.current.decodeAudioData(await kickRes.arrayBuffer())
+        lastFetchedKickFreq.current = params.kick_freq
       }
       if (!audioBuffers.current.glitch) {
         const glitchRes = await fetch(`http://127.0.0.1:8000/generate/glitch`)
         audioBuffers.current.glitch = await audioContextRef.current.decodeAudioData(await glitchRes.arrayBuffer())
       }
-
-      // 2. Fetch background/processed track
-      if (selectedFile) {
-        const formData = new FormData()
-        formData.append('file', selectedFile)
-        for (const key in params) {
-          if (Array.isArray(params[key])) formData.append(key, params[key].join(','))
-          else formData.append(key, params[key])
-        }
-        const response = await fetch(`http://127.0.0.1:8000/process`, { method: 'POST', body: formData })
-        droneBuffer = await audioContextRef.current.decodeAudioData(await response.arrayBuffer())
-      } else {
-        const query = new URLSearchParams({
-          duration: params.duration,
-          carrier_freq: params.carrier_freq,
-          isochronic_beat: params.isochronic_beat,
-          binaural_offset: params.binaural_offset,
-          texture_type: params.texture_type,
-          texture_vol: params.texture_vol,
-          freq_vol: params.freq_vol
-        }).toString()
-        const response = await fetch(`http://127.0.0.1:8000/generate/drone?${query}`)
-        droneBuffer = await audioContextRef.current.decodeAudioData(await response.arrayBuffer())
+      if (!audioBuffers.current.snare) {
+        const snareRes = await fetch(`http://127.0.0.1:8000/generate/snare`)
+        audioBuffers.current.snare = await audioContextRef.current.decodeAudioData(await snareRes.arrayBuffer())
       }
-      
-      // Setup main drone source
-      sourceRef.current = audioContextRef.current.createBufferSource()
-      sourceRef.current.buffer = droneBuffer
-      sourceRef.current.loop = true // Hacer que la pista haga loop infinito
-      
+      if (!audioBuffers.current.hihat) {
+        const hihatRes = await fetch(`http://127.0.0.1:8000/generate/hihat`)
+        audioBuffers.current.hihat = await audioContextRef.current.decodeAudioData(await hihatRes.arrayBuffer())
+      }
+
       // Setup Lowpass Filter for Chaos Pad
       const filter = audioContextRef.current.createBiquadFilter()
       filter.type = 'lowpass'
@@ -347,13 +399,118 @@ function App() {
       // Setup 3D Spatial Panner
       const panner = audioContextRef.current.createPanner()
       panner.panningModel = 'HRTF'
-      // Colocamos el sonido espacialmente "frente" al oyente
       panner.positionX.value = 0
       panner.positionY.value = 0
       panner.positionZ.value = -1
+
+      // 2. Setup Real-time Synth Drone (or external file)
+      let externalSource = null;
+      if (selectedFile) {
+        const formData = new FormData()
+        formData.append('file', selectedFile)
+        for (const key in params) {
+          if (Array.isArray(params[key])) formData.append(key, params[key].join(','))
+          else formData.append(key, params[key])
+        }
+        const response = await fetch(`http://127.0.0.1:8000/process`, { method: 'POST', body: formData })
+        const droneBuffer = await audioContextRef.current.decodeAudioData(await response.arrayBuffer())
+        externalSource = audioContextRef.current.createBufferSource()
+        externalSource.buffer = droneBuffer
+        externalSource.loop = true
+        externalSource.connect(filter)
+        externalSource.start(0)
+        sourceRef.current = externalSource
+      } else {
+        // Real-Time Web Audio Synth
+        const ctx = audioContextRef.current;
+        const now = ctx.currentTime;
+        
+        const carrierL = ctx.createOscillator();
+        const carrierR = ctx.createOscillator();
+        const lfo = ctx.createOscillator(); // Isochronic Beat LFO
+        
+        carrierL.frequency.value = params.carrier_freq;
+        carrierR.frequency.value = params.carrier_freq + params.binaural_offset;
+        lfo.frequency.value = params.isochronic_beat;
+        
+        const carrierGainL = ctx.createGain();
+        const carrierGainR = ctx.createGain();
+        const lfoGain = ctx.createGain();
+        
+        // AM Modulation mapping LFO (-1 to 1) to (0 to 1) roughly
+        lfoGain.gain.value = 0.5;
+        // DC offset to keep signal positive
+        const dcOffset = ctx.createBufferSource();
+        const dcBuffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        dcBuffer.getChannelData(0)[0] = 0.5;
+        dcOffset.buffer = dcBuffer;
+        dcOffset.loop = true;
+        
+        const modMergerL = ctx.createGain();
+        const modMergerR = ctx.createGain();
+        
+        dcOffset.connect(modMergerL);
+        lfo.connect(lfoGain);
+        lfoGain.connect(modMergerL);
+        
+        dcOffset.connect(modMergerR);
+        lfoGain.connect(modMergerR); // LFO applies to both ears if isochronic
+        
+        // Modulate amplitudes
+        modMergerL.connect(carrierGainL.gain);
+        modMergerR.connect(carrierGainR.gain);
+        
+        carrierL.connect(carrierGainL);
+        carrierR.connect(carrierGainR);
+        
+        const merger = ctx.createChannelMerger(2);
+        carrierGainL.connect(merger, 0, 0);
+        carrierGainR.connect(merger, 0, 1);
+        
+        const textureGain = ctx.createGain();
+        textureGain.gain.value = params.texture_type !== 'none' ? params.texture_vol : 0;
+        
+        const masterGain = ctx.createGain();
+        masterGain.gain.value = params.freq_vol;
+        
+        merger.connect(masterGain);
+        textureGain.connect(masterGain);
+        masterGain.connect(filter);
+        
+        carrierL.start(now);
+        carrierR.start(now);
+        lfo.start(now);
+        dcOffset.start(now);
+        
+        synthNodesRef.current = {
+          carrierL, carrierR, lfo, carrierGainL, carrierGainR, lfoGain, masterGain, textureGain, dcOffset, merger
+        };
+
+        if (params.texture_type !== 'none') {
+           const noiseBuffer = createNoiseBuffer(params.texture_type);
+           const tSrc = ctx.createBufferSource();
+           tSrc.buffer = noiseBuffer;
+           tSrc.loop = true;
+           tSrc.connect(textureGain);
+           tSrc.start(now);
+           synthNodesRef.current.textureSource = tSrc;
+        }
+
+        // Dummy sourceRef for Chaos Pad pitch manipulation (which manipulates playbackRate of external audio or just filter)
+        // Since we are synthesizing, Chaos Pad will only affect the filter for the drone.
+        // If we want Chaos Pad to affect pitch of oscillators, we'd need to update updateChaosPad logic.
+        sourceRef.current = {
+           playbackRate: { setTargetAtTime: () => {} }, // mock
+           stop: () => {
+             try { carrierL.stop(); carrierR.stop(); lfo.stop(); dcOffset.stop(); } catch(e){}
+             if (synthNodesRef.current.textureSource) {
+               try { synthNodesRef.current.textureSource.stop(); } catch(e){}
+             }
+           }
+        }
+      }
       
-      // Connect: source -> filter -> panner -> analyser -> destination (speakers)
-      sourceRef.current.connect(filter)
+      // Connect: filter -> panner -> analyser -> destination (speakers)
       filter.connect(panner)
       panner.connect(analyserRef.current)
       analyserRef.current.connect(audioContextRef.current.destination)
@@ -405,6 +562,28 @@ function App() {
           src.start(time)
         }
         
+        // Snare
+        if (currentParams.snare_pattern[beatNumber] === 1 && audioBuffers.current.snare) {
+          const src = audioContextRef.current.createBufferSource()
+          src.buffer = audioBuffers.current.snare
+          const gain = audioContextRef.current.createGain()
+          gain.gain.value = currentParams.snare_vol
+          src.connect(gain)
+          gain.connect(filter)
+          src.start(time)
+        }
+
+        // HiHat
+        if (currentParams.hihat_pattern[beatNumber] === 1 && audioBuffers.current.hihat) {
+          const src = audioContextRef.current.createBufferSource()
+          src.buffer = audioBuffers.current.hihat
+          const gain = audioContextRef.current.createGain()
+          gain.gain.value = currentParams.hihat_vol
+          src.connect(gain)
+          gain.connect(filter)
+          src.start(time)
+        }
+        
         // Glitch
         if (currentParams.glitch_pattern[beatNumber] === 1 && audioBuffers.current.glitch) {
           const src = audioContextRef.current.createBufferSource()
@@ -424,7 +603,7 @@ function App() {
       }
 
       const scheduler = () => {
-        if (!audioContextRef.current || !isPlaying) return // will be overwritten in stop
+        if (!audioContextRef.current || !sourceRef.current) return // detiene el bucle si no hay fuente (se apagó)
         while (schedulerState.current.nextNoteTime < audioContextRef.current.currentTime + 0.1) {
           scheduleNote(schedulerState.current.current16thNote, schedulerState.current.nextNoteTime)
           nextNote()
@@ -435,31 +614,26 @@ function App() {
       // Start Scheduler
       schedulerState.current.current16thNote = 0
       schedulerState.current.nextNoteTime = audioContextRef.current.currentTime + 0.05
-      scheduler()
-
-      // Play
-      sourceRef.current.start(0)
-      setIsPlaying(true)
       
-      sourceRef.current.onended = () => {
-        if (schedulerState.current.timerID) clearTimeout(schedulerState.current.timerID)
-        setIsPlaying(false)
-      }
+      setIsPlaying(true)
+      // Ejecutamos el scheduler después de que el estado cambie
+      setTimeout(scheduler, 0)
       
     } catch (error) {
       console.error('Error generating audio:', error)
-      alert("Error al conectar con el motor DSP de Python. ¿Está corriendo el servidor?")
+      alert("Error al iniciar el motor de audio o conectar con el servidor para percusión.")
     } finally {
       setIsLoading(false)
     }
   }
 
   const stopAudio = () => {
-    if (sourceRef.current && isPlaying) {
+    if (sourceRef.current) {
       if (schedulerState.current.timerID) clearTimeout(schedulerState.current.timerID)
-      sourceRef.current.stop()
+      try { sourceRef.current.stop() } catch(e){}
+      sourceRef.current = null;
       setIsPlaying(false)
-      if (isRecording) {
+      if (isRecording && mediaRecorderRef.current) {
         mediaRecorderRef.current.stop()
         setIsRecording(false)
       }
@@ -550,7 +724,9 @@ function App() {
       
       <main className="main-content">
         <aside className="control-panel mono">
-          <div className="control-group" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div className="control-group">
+            <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Generadores Base</label>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
             <Knob 
               label="BPM" value={params.bpm} min={60} max={180} 
               onChange={v => setParams(p => ({...p, bpm: v}))}
@@ -573,7 +749,10 @@ function App() {
             />
           </div>
           
-          <div className="control-group" style={{ marginTop: '1rem', borderTop: '1px solid #222', paddingTop: '1rem' }}>
+          <div className="control-group">
+            <div style={{ padding: '0.5rem', marginBottom: '1rem', background: '#111', border: '1px dashed #444', borderRadius: '4px', fontSize: '0.8rem', color: '#aaa' }}>
+              <strong style={{color: 'var(--accent)'}}>Guía Rápida:</strong> Haz clic en los cuadros para crear tu patrón. Haz clic en GENERAR & PLAY para empezar a escuchar el bucle. Cambia los volúmenes en el mezclador.
+            </div>
             <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Secuenciador 16 Pasos (Caja de Ritmo)</label>
             <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', color: '#ff4444' }}>KICK</span>
@@ -589,6 +768,48 @@ function App() {
                     style={{
                       height: '24px', 
                       backgroundColor: val ? '#ff4444' : '#1a1a1a',
+                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                      borderRadius: '2px',
+                      cursor: 'pointer'
+                    }} 
+                  />
+                ))}
+              </div>
+              
+              <span style={{ fontSize: '0.7rem', color: '#ffbb00' }}>SNARE</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+                {params.snare_pattern.map((val, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => {
+                      const newP = [...params.snare_pattern]
+                      newP[i] = newP[i] === 1 ? 0 : 1
+                      setParams(p => ({...p, snare_pattern: newP}))
+                    }}
+                    style={{
+                      height: '24px', 
+                      backgroundColor: val ? '#ffbb00' : '#1a1a1a',
+                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                      borderRadius: '2px',
+                      cursor: 'pointer'
+                    }} 
+                  />
+                ))}
+              </div>
+
+              <span style={{ fontSize: '0.7rem', color: '#aaff00' }}>HI-HAT</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+                {params.hihat_pattern.map((val, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => {
+                      const newP = [...params.hihat_pattern]
+                      newP[i] = newP[i] === 1 ? 0 : 1
+                      setParams(p => ({...p, hihat_pattern: newP}))
+                    }}
+                    style={{
+                      height: '24px', 
+                      backgroundColor: val ? '#aaff00' : '#1a1a1a',
                       border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
                       borderRadius: '2px',
                       cursor: 'pointer'
@@ -620,7 +841,7 @@ function App() {
             </div>
           </div>
           
-          <div className="control-group" style={{ marginTop: '1rem', borderTop: '1px solid #222', paddingTop: '1rem' }}>
+          <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Textura Ambiental (ASMR)</label>
             <div className="subdivision-buttons" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem', marginBottom: '0.8rem' }}>
               <button className={`preset-btn mono ${params.texture_type === 'none' ? 'active' : ''}`} style={params.texture_type === 'none' ? {borderColor: 'var(--accent)', color: 'var(--accent)'} : {}} onClick={() => setParams(p => ({...p, texture_type: 'none'}))}>Ninguna</button>
@@ -636,7 +857,7 @@ function App() {
             </div>
           </div>
           
-          <div className="control-group" style={{ marginTop: '1rem', borderTop: '1px solid #222', paddingTop: '1rem' }}>
+          <div className="control-group">
             <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Mezclador Master (Doble-Clic = MIDI Learn)</label>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
               <Knob 
@@ -654,10 +875,20 @@ function App() {
                 onChange={v => setParams(p => ({...p, glitch_vol: v}))}
                 onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'}
               />
+              <Knob 
+                label="Snare Vol" value={params.snare_vol} min={0} max={1} 
+                onChange={v => setParams(p => ({...p, snare_vol: v}))}
+                onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'}
+              />
+              <Knob 
+                label="HiHat Vol" value={params.hihat_vol} min={0} max={1} 
+                onChange={v => setParams(p => ({...p, hihat_vol: v}))}
+                onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'}
+              />
             </div>
           </div>
 
-          <div className="control-group" style={{ marginTop: '1rem', borderTop: '1px solid #222', paddingTop: '1rem' }}>
+          <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Procesar Audio Externo</label>
             <input 
               type="file" 
@@ -668,7 +899,7 @@ function App() {
           </div>
 
           {layers.length > 0 && (
-            <div className="control-group" style={{ marginTop: '1rem', borderTop: '1px solid #222', paddingTop: '1rem' }}>
+            <div className="control-group">
               <label style={{color: 'var(--accent)'}}>Looper Multipista (Capas)</label>
               {layers.map((layer, index) => (
                 <div key={layer.id} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
@@ -704,8 +935,8 @@ function App() {
             </div>
           )}
 
-          <div className="control-group" style={{ marginTop: '1rem' }}>
-            <label>Protocolos (Presets)</label>
+          <div className="control-group">
+            <label style={{color: 'var(--accent)'}}>Protocolos (Presets)</label>
             <div className="presets-container">
               <button className="preset-btn mono" onClick={() => applyPreset('vagal')}>Homeostasis Vagal (80Hz)</button>
               <button className="preset-btn mono" onClick={() => applyPreset('domo')}>Domo Acústico (111Hz)</button>
@@ -715,7 +946,8 @@ function App() {
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+          <div className="control-group">
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button 
               className="action-btn mono" 
               onClick={isPlaying ? stopAudio : generateAndPlay}
@@ -737,6 +969,8 @@ function App() {
             >
               {isRecording ? "[ DETENER ]" : "[ REC EN VIVO ]"}
             </button>
+          </div>
+            </div>
           </div>
         </aside>
         

@@ -117,6 +117,75 @@ class BioSyncEngine:
                 
         return np.column_stack((beat_track, beat_track))
 
+    def generate_snare_layer(self, duration=60, pattern=None):
+        if pattern is None:
+            pattern = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0]
+            
+        t = self._generate_time_axis(duration)
+        track = np.zeros(len(t))
+        
+        snare_length = int(self.sample_rate * 0.25)
+        t_snare = np.linspace(0, 0.25, snare_length, endpoint=False)
+        
+        # Tone (body)
+        freq_env = 250 * np.exp(-20 * t_snare)
+        phase = np.cumsum(freq_env) * 2 * np.pi / self.sample_rate
+        tone = np.sin(phase) * np.exp(-15 * t_snare)
+        
+        # Noise (rattle)
+        noise = np.random.normal(0, 1, snare_length)
+        # Highpass filter for noise
+        b, a = butter(2, 0.1, btype='high')
+        noise = lfilter(b, a, noise)
+        noise_env = np.exp(-10 * t_snare)
+        noise = noise * noise_env
+        
+        snare_audio = (tone * 0.4) + (noise * 0.6)
+        
+        sixteenth_duration = (60.0 / self.bpm) / 4.0
+        sixteenth_samples = int(sixteenth_duration * self.sample_rate)
+        num_sixteenths = int(duration / sixteenth_duration)
+        
+        for i in range(num_sixteenths):
+            if pattern[i % len(pattern)] == 1:
+                start = i * sixteenth_samples
+                end = start + snare_length
+                if end < len(track):
+                    track[start:end] = snare_audio
+                    
+        return np.column_stack((track, track))
+
+    def generate_hihat_layer(self, duration=60, pattern=None):
+        if pattern is None:
+            pattern = [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0]
+            
+        t = self._generate_time_axis(duration)
+        track = np.zeros(len(t))
+        
+        hh_length = int(self.sample_rate * 0.1)
+        t_hh = np.linspace(0, 0.1, hh_length, endpoint=False)
+        
+        # Metallic noise
+        noise = np.random.normal(0, 1, hh_length)
+        b, a = butter(4, 0.3, btype='high')
+        noise = lfilter(b, a, noise)
+        
+        amp_env = np.exp(-40 * t_hh)
+        hh_audio = noise * amp_env
+        
+        sixteenth_duration = (60.0 / self.bpm) / 4.0
+        sixteenth_samples = int(sixteenth_duration * self.sample_rate)
+        num_sixteenths = int(duration / sixteenth_duration)
+        
+        for i in range(num_sixteenths):
+            if pattern[i % len(pattern)] == 1:
+                start = i * sixteenth_samples
+                end = start + hh_length
+                if end < len(track):
+                    track[start:end] = hh_audio
+                    
+        return np.column_stack((track, track))
+
     # --- MOTOR 4: PROCESAMIENTO DE ARCHIVOS (Pitch Shifting) ---
     def process_user_track(self, audio_data, orig_sr, orig_tuning=440, target_tuning=432, duration=None):
         """

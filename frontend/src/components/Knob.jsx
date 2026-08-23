@@ -45,8 +45,8 @@ const Knob = ({ label, value, min, max, onChange, onMidiLearn, midiLearnActive }
           transform: `translateX(-50%) rotate(${deg}deg)`
         }} />
       </div>
-      <span style={{ fontSize: '0.6rem', marginTop: '0.5rem', color: '#888', textAlign: 'center', maxWidth: '60px' }}>{label}</span>
-      <span style={{ fontSize: '0.7rem', color: '#00ffcc' }}>{value.toFixed(2)}</span>
+      <span style={{ fontSize: '0.6rem', marginTop: '0.5rem', color: '#888', textAlign: 'center', maxWidth: '60px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{label}</span>
+      <span style={{ fontSize: '0.7rem', color: '#00ffcc', marginTop: '0.2rem' }}>{value.toFixed(2)}</span>
     </div>
   )
 }

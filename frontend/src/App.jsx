@@ -905,28 +905,27 @@ function App() {
           
           <div className="control-group">
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button 
-              className="action-btn mono" 
-              onClick={isPlaying ? stopAudio : generateAndPlay}
-              disabled={isLoading}
-              style={{ flex: 1, padding: '1rem 0' }}
-            >
-              {isLoading ? "RENDERIZANDO..." : isPlaying ? "[ STOP ]" : "[ GENERAR & PLAY ]"}
-            </button>
-            <button 
-              className="action-btn mono" 
-              onClick={handleRecord}
-              disabled={!isPlaying}
-              style={{ 
-                flex: 1, 
-                backgroundColor: isRecording ? '#cc0000' : 'var(--bg-secondary)', 
-                color: isRecording ? '#fff' : 'var(--text-primary)',
-                borderColor: isRecording ? '#ff4444' : 'var(--border)'
-              }}
-            >
-              {isRecording ? "[ DETENER ]" : "[ REC EN VIVO ]"}
-            </button>
-          </div>
+              <button 
+                className="action-btn mono" 
+                onClick={isPlaying ? stopAudio : generateAndPlay}
+                disabled={isLoading}
+                style={{ flex: 1, padding: '1rem 0' }}
+              >
+                {isLoading ? "RENDERIZANDO..." : isPlaying ? "[ STOP ]" : "[ GENERAR & PLAY ]"}
+              </button>
+              <button 
+                className="action-btn mono" 
+                onClick={handleRecord}
+                disabled={!isPlaying}
+                style={{ 
+                  flex: 1, 
+                  backgroundColor: isRecording ? '#cc0000' : 'var(--bg-secondary)', 
+                  color: isRecording ? '#fff' : 'var(--text-primary)',
+                  borderColor: isRecording ? '#ff4444' : 'var(--border)'
+                }}
+              >
+                {isRecording ? "[ DETENER ]" : "[ REC EN VIVO ]"}
+              </button>
             </div>
           </div>
         </aside>

@@ -373,20 +373,20 @@ function App() {
     try {
       // 1. Fetch One-Shots for the sequencer
       if (!audioBuffers.current.kick || lastFetchedKickFreq.current !== params.kick_freq) {
-        const kickRes = await fetch(`http://127.0.0.1:8000/generate/kick?kick_freq=${params.kick_freq}`)
+        const kickRes = await fetch(`http://127.0.0.1:8080/generate/kick?kick_freq=${params.kick_freq}`)
         audioBuffers.current.kick = await audioContextRef.current.decodeAudioData(await kickRes.arrayBuffer())
         lastFetchedKickFreq.current = params.kick_freq
       }
       if (!audioBuffers.current.glitch) {
-        const glitchRes = await fetch(`http://127.0.0.1:8000/generate/glitch`)
+        const glitchRes = await fetch(`http://127.0.0.1:8080/generate/glitch`)
         audioBuffers.current.glitch = await audioContextRef.current.decodeAudioData(await glitchRes.arrayBuffer())
       }
       if (!audioBuffers.current.snare) {
-        const snareRes = await fetch(`http://127.0.0.1:8000/generate/snare`)
+        const snareRes = await fetch(`http://127.0.0.1:8080/generate/snare`)
         audioBuffers.current.snare = await audioContextRef.current.decodeAudioData(await snareRes.arrayBuffer())
       }
       if (!audioBuffers.current.hihat) {
-        const hihatRes = await fetch(`http://127.0.0.1:8000/generate/hihat`)
+        const hihatRes = await fetch(`http://127.0.0.1:8080/generate/hihat`)
         audioBuffers.current.hihat = await audioContextRef.current.decodeAudioData(await hihatRes.arrayBuffer())
       }
 
@@ -412,7 +412,7 @@ function App() {
           if (Array.isArray(params[key])) formData.append(key, params[key].join(','))
           else formData.append(key, params[key])
         }
-        const response = await fetch(`http://127.0.0.1:8000/process`, { method: 'POST', body: formData })
+        const response = await fetch(`http://127.0.0.1:8080/process`, { method: 'POST', body: formData })
         const droneBuffer = await audioContextRef.current.decodeAudioData(await response.arrayBuffer())
         externalSource = audioContextRef.current.createBufferSource()
         externalSource.buffer = droneBuffer
@@ -724,29 +724,22 @@ function App() {
       
       <main className="main-content">
         <aside className="control-panel mono">
-          <div className="control-group">
-            <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Generadores Base</label>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <Knob 
-              label="BPM" value={params.bpm} min={60} max={180} 
-              onChange={v => setParams(p => ({...p, bpm: v}))}
-              onMidiLearn={() => handleMidiLearn('bpm')} midiLearnActive={activeLearnParam === 'bpm'}
-            />
-            <Knob 
-              label="Frec. Base" value={params.carrier_freq} min={40} max={963} 
-              onChange={v => setParams(p => ({...p, carrier_freq: v}))}
-              onMidiLearn={() => handleMidiLearn('carrier_freq')} midiLearnActive={activeLearnParam === 'carrier_freq'}
-            />
-            <Knob 
-              label="Isocrónico" value={params.isochronic_beat} min={0.5} max={40} 
-              onChange={v => setParams(p => ({...p, isochronic_beat: v}))}
-              onMidiLearn={() => handleMidiLearn('isochronic_beat')} midiLearnActive={activeLearnParam === 'isochronic_beat'}
-            />
-            <Knob 
-              label="Binaural" value={params.binaural_offset} min={0} max={40} 
-              onChange={v => setParams(p => ({...p, binaural_offset: v}))}
-              onMidiLearn={() => handleMidiLearn('binaural_offset')} midiLearnActive={activeLearnParam === 'binaural_offset'}
-            />
+          <div className="control-group" style={{ width: '100%' }}>
+            <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Panel Principal de Perillas</label>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <Knob label="BPM" value={params.bpm} min={60} max={180} onChange={v => setParams(p => ({...p, bpm: v}))} onMidiLearn={() => handleMidiLearn('bpm')} midiLearnActive={activeLearnParam === 'bpm'} />
+              <Knob label="Frec. Base" value={params.carrier_freq} min={40} max={963} onChange={v => setParams(p => ({...p, carrier_freq: v}))} onMidiLearn={() => handleMidiLearn('carrier_freq')} midiLearnActive={activeLearnParam === 'carrier_freq'} />
+              <Knob label="Isocrónico" value={params.isochronic_beat} min={0.5} max={40} onChange={v => setParams(p => ({...p, isochronic_beat: v}))} onMidiLearn={() => handleMidiLearn('isochronic_beat')} midiLearnActive={activeLearnParam === 'isochronic_beat'} />
+              <Knob label="Binaural" value={params.binaural_offset} min={0} max={40} onChange={v => setParams(p => ({...p, binaural_offset: v}))} onMidiLearn={() => handleMidiLearn('binaural_offset')} midiLearnActive={activeLearnParam === 'binaural_offset'} />
+              <div style={{ width: '1px', background: '#333', margin: '0 0.5rem' }}></div>
+              <Knob label="Vol Textura" value={params.texture_vol} min={0} max={1} onChange={v => setParams(p => ({...p, texture_vol: v}))} onMidiLearn={() => handleMidiLearn('texture_vol')} midiLearnActive={activeLearnParam === 'texture_vol'} />
+              <div style={{ width: '1px', background: '#333', margin: '0 0.5rem' }}></div>
+              <Knob label="Freq Vol" value={params.freq_vol} min={0} max={1} onChange={v => setParams(p => ({...p, freq_vol: v}))} onMidiLearn={() => handleMidiLearn('freq_vol')} midiLearnActive={activeLearnParam === 'freq_vol'} />
+              <Knob label="Beat Vol" value={params.beat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, beat_vol: v}))} onMidiLearn={() => handleMidiLearn('beat_vol')} midiLearnActive={activeLearnParam === 'beat_vol'} />
+              <Knob label="Glitch Vol" value={params.glitch_vol} min={0} max={1} onChange={v => setParams(p => ({...p, glitch_vol: v}))} onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'} />
+              <Knob label="Snare Vol" value={params.snare_vol} min={0} max={1} onChange={v => setParams(p => ({...p, snare_vol: v}))} onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'} />
+              <Knob label="HiHat Vol" value={params.hihat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, hihat_vol: v}))} onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'} />
+            </div>
           </div>
           
           <div className="control-group">
@@ -843,50 +836,14 @@ function App() {
           
           <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Textura Ambiental (ASMR)</label>
-            <div className="subdivision-buttons" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem', marginBottom: '0.8rem' }}>
+            <div className="subdivision-buttons" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.2rem' }}>
               <button className={`preset-btn mono ${params.texture_type === 'none' ? 'active' : ''}`} style={params.texture_type === 'none' ? {borderColor: 'var(--accent)', color: 'var(--accent)'} : {}} onClick={() => setParams(p => ({...p, texture_type: 'none'}))}>Ninguna</button>
               <button className={`preset-btn mono ${params.texture_type === 'pink' ? 'active' : ''}`} style={params.texture_type === 'pink' ? {borderColor: 'var(--accent)', color: 'var(--accent)'} : {}} onClick={() => setParams(p => ({...p, texture_type: 'pink'}))}>Ruido Rosa</button>
               <button className={`preset-btn mono ${params.texture_type === 'rain' ? 'active' : ''}`} style={params.texture_type === 'rain' ? {borderColor: 'var(--accent)', color: 'var(--accent)'} : {}} onClick={() => setParams(p => ({...p, texture_type: 'rain'}))}>Lluvia</button>
             </div>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <Knob 
-                label="Vol Textura" value={params.texture_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, texture_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('texture_vol')} midiLearnActive={activeLearnParam === 'texture_vol'}
-              />
-            </div>
           </div>
           
-          <div className="control-group">
-            <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Mezclador Master (Doble-Clic = MIDI Learn)</label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <Knob 
-                label="Freq Vol" value={params.freq_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, freq_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('freq_vol')} midiLearnActive={activeLearnParam === 'freq_vol'}
-              />
-              <Knob 
-                label="Beat Vol" value={params.beat_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, beat_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('beat_vol')} midiLearnActive={activeLearnParam === 'beat_vol'}
-              />
-              <Knob 
-                label="Glitch Vol" value={params.glitch_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, glitch_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'}
-              />
-              <Knob 
-                label="Snare Vol" value={params.snare_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, snare_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'}
-              />
-              <Knob 
-                label="HiHat Vol" value={params.hihat_vol} min={0} max={1} 
-                onChange={v => setParams(p => ({...p, hihat_vol: v}))}
-                onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'}
-              />
-            </div>
-          </div>
+
 
           <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Procesar Audio Externo</label>

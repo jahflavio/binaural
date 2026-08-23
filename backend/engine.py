@@ -132,15 +132,12 @@ class BioSyncEngine:
         phase = np.cumsum(freq_env) * 2 * np.pi / self.sample_rate
         tone = np.sin(phase) * np.exp(-15 * t_snare)
         
-        # Noise (rattle)
+        # Noise (rattle) - simplified to avoid filter issues
         noise = np.random.normal(0, 1, snare_length)
-        # Highpass filter for noise
-        b, a = butter(2, 0.1, btype='high')
-        noise = lfilter(b, a, noise)
         noise_env = np.exp(-10 * t_snare)
         noise = noise * noise_env
         
-        snare_audio = (tone * 0.4) + (noise * 0.6)
+        snare_audio = (tone * 0.6) + (noise * 0.8) # Boosted volume
         
         sixteenth_duration = (60.0 / self.bpm) / 4.0
         sixteenth_samples = int(sixteenth_duration * self.sample_rate)
@@ -165,13 +162,11 @@ class BioSyncEngine:
         hh_length = int(self.sample_rate * 0.1)
         t_hh = np.linspace(0, 0.1, hh_length, endpoint=False)
         
-        # Metallic noise
+        # Metallic noise - simplified
         noise = np.random.normal(0, 1, hh_length)
-        b, a = butter(4, 0.3, btype='high')
-        noise = lfilter(b, a, noise)
         
         amp_env = np.exp(-40 * t_hh)
-        hh_audio = noise * amp_env
+        hh_audio = noise * amp_env * 1.5 # Boosted volume
         
         sixteenth_duration = (60.0 / self.bpm) / 4.0
         sixteenth_samples = int(sixteenth_duration * self.sample_rate)

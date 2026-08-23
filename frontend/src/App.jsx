@@ -2,56 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import './App.css'
 
-const Knob = ({ label, value, min, max, onChange, onMidiLearn, midiLearnActive }) => {
-  const startY = useRef(0)
-  const startVal = useRef(0)
-  const pct = (value - min) / (max - min)
-  const deg = -135 + (pct * 270)
-
-  const handleDown = (e) => {
-    startY.current = e.clientY
-    startVal.current = value
-    document.addEventListener('mousemove', handleMove)
-    document.addEventListener('mouseup', handleUp)
-  }
-
-  const handleMove = (e) => {
-    const deltaY = startY.current - e.clientY
-    const deltaVal = (deltaY / 150) * (max - min)
-    let newVal = startVal.current + deltaVal
-    newVal = Math.max(min, Math.min(max, newVal))
-    onChange(newVal)
-  }
-
-  const handleUp = () => {
-    document.removeEventListener('mousemove', handleMove)
-    document.removeEventListener('mouseup', handleUp)
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0' }}>
-      <div 
-        onMouseDown={handleDown}
-        onDoubleClick={onMidiLearn}
-        style={{
-          width: '40px', height: '40px', borderRadius: '50%',
-          background: 'linear-gradient(145deg, #2a2a2a, #111)',
-          boxShadow: '2px 2px 5px #050505, -2px -2px 5px #222',
-          position: 'relative', cursor: 'ns-resize',
-          border: midiLearnActive ? '2px solid #ff4444' : '2px solid #333'
-        }}
-      >
-        <div style={{
-          position: 'absolute', top: '10%', left: '50%', width: '3px', height: '12px',
-          background: '#00ffcc', transformOrigin: '50% 16px',
-          transform: `translateX(-50%) rotate(${deg}deg)`
-        }} />
-      </div>
-      <span style={{ fontSize: '0.6rem', marginTop: '0.5rem', color: '#888', textAlign: 'center', maxWidth: '60px' }}>{label}</span>
-      <span style={{ fontSize: '0.7rem', color: '#00ffcc' }}>{value.toFixed(2)}</span>
-    </div>
-  )
-}
+import Knob from './components/Knob'
+import SequencerGrid from './components/SequencerGrid'
+import Visualizer3D from './components/Visualizer3D'
 
 function App() {
   const [params, setParams] = useState({
@@ -106,7 +59,7 @@ function App() {
   const filterRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const recordedChunksRef = useRef([])
-  const canvasRef = useRef(null)
+  const chaosPadRef = useRef(null)
   const requestRef = useRef(null)
   const isDragging = useRef(false)
 
@@ -167,7 +120,7 @@ function App() {
     setActiveLearnParam(paramName)
   }
 
-  // Initialize Web Audio API and WebGL 3D Canvas
+  // Initialize Web Audio API
   useEffect(() => {
     // Setup Audio Context
     const AudioContext = window.AudioContext || window.webkitAudioContext
@@ -175,101 +128,7 @@ function App() {
     analyserRef.current = audioContextRef.current.createAnalyser()
     analyserRef.current.fftSize = 2048
     
-    // --- THREE.JS SETUP ---
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000)
-    camera.position.z = 5
-    
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    
-    if (canvasRef.current) {
-      const parent = canvasRef.current.parentElement
-      renderer.setSize(parent.clientWidth, parent.clientHeight)
-      canvasRef.current.appendChild(renderer.domElement)
-      camera.aspect = parent.clientWidth / parent.clientHeight
-      camera.updateProjectionMatrix()
-    }
-    
-    // Raster-Noton Aesthetic: Wireframe Geometry
-    const geometry = new THREE.TorusKnotGeometry(2, 0.6, 128, 32)
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ffcc, wireframe: true })
-    const mesh = new THREE.Mesh(geometry, material)
-    scene.add(mesh)
-    
-    // Guardar posiciones originales para deformación relativa
-    const originalPositions = geometry.attributes.position.array.slice()
-    
-    const draw = () => {
-      if (!analyserRef.current || !mesh) return
-      const bufferLength = analyserRef.current.frequencyBinCount
-      const timeData = new Uint8Array(bufferLength)
-      const freqData = new Uint8Array(bufferLength)
-      
-      analyserRef.current.getByteTimeDomainData(timeData)
-      analyserRef.current.getByteFrequencyData(freqData)
-      
-      let bassEnergy = 0;
-      for(let i = 0; i < 20; i++) bassEnergy += freqData[i];
-      bassEnergy = bassEnergy / 20;
-      
-      // Rotación constante + reacción al bombo
-      mesh.rotation.x += 0.002 + (bassEnergy / 10000)
-      mesh.rotation.y += 0.003 + (bassEnergy / 10000)
-      
-      // Deformar vértices con la forma de onda
-      const positions = geometry.attributes.position.array
-      for (let i = 0; i < positions.length; i += 3) {
-        const dataIndex = (i / 3) % bufferLength
-        const v = timeData[dataIndex] / 128.0 // 0 a 2
-        
-        const ox = originalPositions[i]
-        const oy = originalPositions[i+1]
-        const oz = originalPositions[i+2]
-        
-        const length = Math.sqrt(ox*ox + oy*oy + oz*oz) || 1
-        const nx = ox / length
-        const ny = oy / length
-        const nz = oz / length
-        
-        const distortion = (v - 1.0) * 1.5 * (bassEnergy / 50 + 1)
-        
-        positions[i] = ox + nx * distortion
-        positions[i+1] = oy + ny * distortion
-        positions[i+2] = oz + nz * distortion
-      }
-      geometry.attributes.position.needsUpdate = true
-      
-      // Cambiar color
-      const hue = (Date.now() / 50) % 360
-      material.color.setHSL(hue / 360, 0.8, 0.3 + (bassEnergy / 510))
-      
-      renderer.render(scene, camera)
-      requestRef.current = requestAnimationFrame(draw)
-    }
-    
-    requestRef.current = requestAnimationFrame(draw)
-    
-    // Handle resizing
-    const handleResize = () => {
-      if (canvasRef.current) {
-        const parent = canvasRef.current.parentElement
-        camera.aspect = parent.clientWidth / parent.clientHeight
-        camera.updateProjectionMatrix()
-        renderer.setSize(parent.clientWidth, parent.clientHeight)
-      }
-    }
-    window.addEventListener('resize', handleResize)
-    
     return () => {
-      cancelAnimationFrame(requestRef.current)
-      window.removeEventListener('resize', handleResize)
-      if (canvasRef.current && renderer.domElement) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        canvasRef.current.removeChild(renderer.domElement)
-      }
-      geometry.dispose()
-      material.dispose()
-      renderer.dispose()
       if (audioContextRef.current) audioContextRef.current.close()
     }
   }, [])
@@ -683,9 +542,9 @@ function App() {
   }
 
   const updateChaosPad = (e) => {
-    if (!canvasRef.current || !sourceRef.current || !filterRef.current || !audioContextRef.current) return
+    if (!chaosPadRef.current || !sourceRef.current || !filterRef.current || !audioContextRef.current) return
     
-    const rect = canvasRef.current.getBoundingClientRect()
+    const rect = chaosPadRef.current.getBoundingClientRect()
     // Normalize coordinates from 0 to 1
     const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
     const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
@@ -746,92 +605,8 @@ function App() {
             <div style={{ padding: '0.5rem', marginBottom: '1rem', background: '#111', border: '1px dashed #444', borderRadius: '4px', fontSize: '0.8rem', color: '#aaa' }}>
               <strong style={{color: 'var(--accent)'}}>Guía Rápida:</strong> Haz clic en los cuadros para crear tu patrón. Haz clic en GENERAR & PLAY para empezar a escuchar el bucle. Cambia los volúmenes en el mezclador.
             </div>
-            <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Secuenciador 16 Pasos (Caja de Ritmo)</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr', gap: '0.5rem', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.7rem', color: '#ff4444' }}>KICK</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-                {params.kick_pattern.map((val, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => {
-                      const newP = [...params.kick_pattern]
-                      newP[i] = newP[i] === 1 ? 0 : 1
-                      setParams(p => ({...p, kick_pattern: newP}))
-                    }}
-                    style={{
-                      height: '24px', 
-                      backgroundColor: val ? '#ff4444' : '#1a1a1a',
-                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                      borderRadius: '2px',
-                      cursor: 'pointer'
-                    }} 
-                  />
-                ))}
-              </div>
-              
-              <span style={{ fontSize: '0.7rem', color: '#ffbb00' }}>SNARE</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-                {params.snare_pattern.map((val, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => {
-                      const newP = [...params.snare_pattern]
-                      newP[i] = newP[i] === 1 ? 0 : 1
-                      setParams(p => ({...p, snare_pattern: newP}))
-                    }}
-                    style={{
-                      height: '24px', 
-                      backgroundColor: val ? '#ffbb00' : '#1a1a1a',
-                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                      borderRadius: '2px',
-                      cursor: 'pointer'
-                    }} 
-                  />
-                ))}
-              </div>
-
-              <span style={{ fontSize: '0.7rem', color: '#aaff00' }}>HI-HAT</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-                {params.hihat_pattern.map((val, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => {
-                      const newP = [...params.hihat_pattern]
-                      newP[i] = newP[i] === 1 ? 0 : 1
-                      setParams(p => ({...p, hihat_pattern: newP}))
-                    }}
-                    style={{
-                      height: '24px', 
-                      backgroundColor: val ? '#aaff00' : '#1a1a1a',
-                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                      borderRadius: '2px',
-                      cursor: 'pointer'
-                    }} 
-                  />
-                ))}
-              </div>
-              
-              <span style={{ fontSize: '0.7rem', color: '#00ffcc' }}>GLITCH</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-                {params.glitch_pattern.map((val, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => {
-                      const newP = [...params.glitch_pattern]
-                      newP[i] = newP[i] === 1 ? 0 : 1
-                      setParams(p => ({...p, glitch_pattern: newP}))
-                    }}
-                    style={{
-                      height: '24px', 
-                      backgroundColor: val ? '#00ffcc' : '#1a1a1a',
-                      border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                      borderRadius: '2px',
-                      cursor: 'pointer'
-                    }} 
-                  />
-                ))}
-              </div>
-            </div>
+            
+            <SequencerGrid params={params} setParams={setParams} />
           </div>
           
           <div className="control-group">
@@ -843,8 +618,6 @@ function App() {
             </div>
           </div>
           
-
-
           <div className="control-group">
             <label style={{color: 'var(--accent)'}}>Procesar Audio Externo</label>
             <input 
@@ -930,18 +703,19 @@ function App() {
           </div>
         </aside>
         
-        <section className="visualizer-container">
+        <section className="visualizer-container" style={{ position: 'relative' }}>
           <div className="status-overlay mono">
             {isPlaying ? (isRecording ? "STATUS: LIVE RECORDING" : "STATUS: ANALYZING AUDIO STREAM") : "STATUS: IDLE"}
           </div>
           <div 
-            ref={canvasRef}
+            ref={chaosPadRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
-            style={{ width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none' }}
+            style={{ width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none', position: 'absolute', top: 0, left: 0, zIndex: 10 }}
           ></div>
+          <Visualizer3D analyserRef={analyserRef} />
         </section>
       </main>
     </div>

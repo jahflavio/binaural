@@ -28,7 +28,14 @@ function App() {
     snare_vol: 0.6,
     hihat_vol: 0.5,
     bass_vol: 0.8,
-    user_vol: 0.6
+    user_vol: 0.6,
+    mute_texture: false,
+    mute_freq: false,
+    mute_beat: false,
+    mute_glitch: false,
+    mute_snare: false,
+    mute_hihat: false,
+    mute_bass: false
   })
   
   const [selectedFile, setSelectedFile] = useState(null)
@@ -354,10 +361,10 @@ function App() {
         carrierGainR.connect(merger, 0, 1);
         
         const textureGain = ctx.createGain();
-        textureGain.gain.value = params.texture_type !== 'none' ? params.texture_vol : 0;
+        textureGain.gain.value = params.mute_texture || params.texture_type === 'none' ? 0 : params.texture_vol;
         
         const masterGain = ctx.createGain();
-        masterGain.gain.value = params.freq_vol;
+        masterGain.gain.value = params.mute_freq ? 0 : params.freq_vol;
         
         merger.connect(masterGain);
         textureGain.connect(masterGain);
@@ -433,7 +440,7 @@ function App() {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.kick
           const gain = audioContextRef.current.createGain()
-          gain.gain.value = currentParams.beat_vol
+          gain.gain.value = currentParams.mute_beat ? 0 : currentParams.beat_vol
           src.connect(gain)
           gain.connect(filter)
           src.start(time)
@@ -442,7 +449,7 @@ function App() {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.snare
           const gain = audioContextRef.current.createGain()
-          gain.gain.value = currentParams.snare_vol
+          gain.gain.value = currentParams.mute_snare ? 0 : currentParams.snare_vol
           src.connect(gain)
           gain.connect(filter)
           src.start(time)
@@ -451,7 +458,7 @@ function App() {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.hihat
           const gain = audioContextRef.current.createGain()
-          gain.gain.value = currentParams.hihat_vol
+          gain.gain.value = currentParams.mute_hihat ? 0 : currentParams.hihat_vol
           src.connect(gain)
           gain.connect(filter)
           src.start(time)
@@ -460,7 +467,7 @@ function App() {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.glitch
           const gain = audioContextRef.current.createGain()
-          gain.gain.value = currentParams.glitch_vol
+          gain.gain.value = currentParams.mute_glitch ? 0 : currentParams.glitch_vol
           src.connect(gain)
           gain.connect(filter)
           src.start(time)
@@ -475,7 +482,8 @@ function App() {
           osc.frequency.setValueAtTime(bassFreq, time)
           
           // Envolvente tipo Bass (Decaimiento rápido, sin sustain)
-          oscGain.gain.setValueAtTime(currentParams.bass_vol, time)
+          const targetVol = currentParams.mute_bass ? 0 : currentParams.bass_vol
+          oscGain.gain.setValueAtTime(targetVol, time)
           oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.4)
           
           osc.connect(oscGain)
@@ -626,14 +634,58 @@ function App() {
               <Knob label="Isocrónico" value={params.isochronic_beat} min={0.5} max={40} onChange={v => setParams(p => ({...p, isochronic_beat: v}))} onMidiLearn={() => handleMidiLearn('isochronic_beat')} midiLearnActive={activeLearnParam === 'isochronic_beat'} />
               <Knob label="Binaural" value={params.binaural_offset} min={0} max={40} onChange={v => setParams(p => ({...p, binaural_offset: v}))} onMidiLearn={() => handleMidiLearn('binaural_offset')} midiLearnActive={activeLearnParam === 'binaural_offset'} />
               <div style={{ width: '1px', background: '#333', margin: '0 0.5rem' }}></div>
-              <Knob label="Vol Textura" value={params.texture_vol} min={0} max={1} onChange={v => setParams(p => ({...p, texture_vol: v}))} onMidiLearn={() => handleMidiLearn('texture_vol')} midiLearnActive={activeLearnParam === 'texture_vol'} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Vol Textura" value={params.texture_vol} min={0} max={1} onChange={v => setParams(p => ({...p, texture_vol: v}))} onMidiLearn={() => handleMidiLearn('texture_vol')} midiLearnActive={activeLearnParam === 'texture_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_texture: !p.mute_texture}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_texture ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  {params.mute_texture ? 'M' : 'M'}
+                </button>
+              </div>
               <div style={{ width: '1px', background: '#333', margin: '0 0.5rem' }}></div>
-              <Knob label="Freq Vol" value={params.freq_vol} min={0} max={1} onChange={v => setParams(p => ({...p, freq_vol: v}))} onMidiLearn={() => handleMidiLearn('freq_vol')} midiLearnActive={activeLearnParam === 'freq_vol'} />
-              <Knob label="Beat Vol" value={params.beat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, beat_vol: v}))} onMidiLearn={() => handleMidiLearn('beat_vol')} midiLearnActive={activeLearnParam === 'beat_vol'} />
-              <Knob label="Glitch Vol" value={params.glitch_vol} min={0} max={1} onChange={v => setParams(p => ({...p, glitch_vol: v}))} onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'} />
-              <Knob label="Snare Vol" value={params.snare_vol} min={0} max={1} onChange={v => setParams(p => ({...p, snare_vol: v}))} onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'} />
-              <Knob label="HiHat Vol" value={params.hihat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, hihat_vol: v}))} onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'} />
-              <Knob label="Bass Vol" value={params.bass_vol} min={0} max={1} onChange={v => setParams(p => ({...p, bass_vol: v}))} onMidiLearn={() => handleMidiLearn('bass_vol')} midiLearnActive={activeLearnParam === 'bass_vol'} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Freq Vol" value={params.freq_vol} min={0} max={1} onChange={v => setParams(p => ({...p, freq_vol: v}))} onMidiLearn={() => handleMidiLearn('freq_vol')} midiLearnActive={activeLearnParam === 'freq_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_freq: !p.mute_freq}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_freq ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Kick Vol" value={params.beat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, beat_vol: v}))} onMidiLearn={() => handleMidiLearn('beat_vol')} midiLearnActive={activeLearnParam === 'beat_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_beat: !p.mute_beat}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_beat ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Glitch Vol" value={params.glitch_vol} min={0} max={1} onChange={v => setParams(p => ({...p, glitch_vol: v}))} onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_glitch: !p.mute_glitch}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_glitch ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Snare Vol" value={params.snare_vol} min={0} max={1} onChange={v => setParams(p => ({...p, snare_vol: v}))} onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_snare: !p.mute_snare}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_snare ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="HiHat Vol" value={params.hihat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, hihat_vol: v}))} onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_hihat: !p.mute_hihat}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_hihat ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Knob label="Bass Vol" value={params.bass_vol} min={0} max={1} onChange={v => setParams(p => ({...p, bass_vol: v}))} onMidiLearn={() => handleMidiLearn('bass_vol')} midiLearnActive={activeLearnParam === 'bass_vol'} />
+                <button 
+                  onClick={() => setParams(p => ({...p, mute_bass: !p.mute_bass}))}
+                  style={{ marginTop: '0.2rem', padding: '2px 8px', fontSize: '0.6rem', background: params.mute_bass ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer' }}
+                >M</button>
+              </div>
             </div>
           </div>
           

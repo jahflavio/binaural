@@ -4,8 +4,15 @@ const SequencerGrid = ({ params, setParams }) => {
   return (
     <>
       <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Secuenciador 16 Pasos (Caja de Ritmo)</label>
-      <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr', gap: '0.5rem', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.7rem', color: '#ff4444' }}>KICK</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '0.5rem', alignItems: 'center' }}>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: '#ff4444', fontWeight: 'bold' }}>KICK</span>
+          <button 
+            onClick={() => setParams(p => ({...p, mute_beat: !p.mute_beat}))}
+            style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_beat ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+          >M</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
           {params.kick_pattern.map((val, i) => (
             <div 
@@ -26,7 +33,13 @@ const SequencerGrid = ({ params, setParams }) => {
           ))}
         </div>
         
-        <span style={{ fontSize: '0.7rem', color: '#ffbb00' }}>SNARE</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: '#ffbb00', fontWeight: 'bold' }}>SNARE</span>
+          <button 
+            onClick={() => setParams(p => ({...p, mute_snare: !p.mute_snare}))}
+            style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_snare ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+          >M</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
           {params.snare_pattern.map((val, i) => (
             <div 
@@ -47,7 +60,13 @@ const SequencerGrid = ({ params, setParams }) => {
           ))}
         </div>
 
-        <span style={{ fontSize: '0.7rem', color: '#aaff00' }}>HI-HAT</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: '#aaff00', fontWeight: 'bold' }}>HI-HAT</span>
+          <button 
+            onClick={() => setParams(p => ({...p, mute_hihat: !p.mute_hihat}))}
+            style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_hihat ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+          >M</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
           {params.hihat_pattern.map((val, i) => (
             <div 
@@ -68,7 +87,13 @@ const SequencerGrid = ({ params, setParams }) => {
           ))}
         </div>
 
-        <span style={{ fontSize: '0.7rem', color: '#00ccff' }}>GLITCH</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: '#00ccff', fontWeight: 'bold' }}>GLITCH</span>
+          <button 
+            onClick={() => setParams(p => ({...p, mute_glitch: !p.mute_glitch}))}
+            style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_glitch ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+          >M</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
           {params.glitch_pattern.map((val, i) => (
             <div 
@@ -89,7 +114,13 @@ const SequencerGrid = ({ params, setParams }) => {
           ))}
         </div>
 
-        <span style={{ fontSize: '0.7rem', color: '#8800ff' }}>BASS</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.6rem', color: '#8800ff', fontWeight: 'bold' }}>BASS</span>
+          <button 
+            onClick={() => setParams(p => ({...p, mute_bass: !p.mute_bass}))}
+            style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_bass ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
+          >M</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
           {params.bass_pattern.map((val, i) => (
             <div 

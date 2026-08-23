@@ -1,33 +1,26 @@
-# 🎛️ Guía de Uso - BioSync DSP V3.0
+# 🎛️ Guía de Uso - BioSync DSP (Fase 6 Completada)
 
-¡Bienvenido a la versión 3.0! Tu aplicación se ha transformado de un simple generador de frecuencias a un **Secuenciador y Looper para directo**. Aquí tienes cómo aprovechar todas las nuevas funciones.
+¡Bienvenido a la versión final de tu Sintetizador/Caja de Ritmos Somático! Tu aplicación ahora actúa como un **Secuenciador Real-Time, Master Clock y Looper para directo**. Aquí tienes cómo aprovechar todas las nuevas funciones.
 
 ## 1. El Secuenciador de 16 Pasos (Caja de Ritmo)
-En el panel lateral verás una nueva cuadrícula de 16 botones para **KICK** (Bombo rojo) y **GLITCH** (Ruido cyan).
+En el panel lateral verás una cuadrícula de 16 botones para las pistas **KICK**, **SNARE**, **HI-HAT**, **GLITCH** y el nuevo sintetizador **SUB-BASS**.
 - **Cómo usarlo**: Haz clic en los pequeños bloques para encenderlos o apagarlos. Representan los 16 tiempos de un compás.
-- **Reproducción**: Actualmente, ajustas el patrón y haces clic en `[ GENERAR & PLAY ]`. El motor de Python creará instantáneamente la pista rítmica exacta que dibujaste, con síntesis matemática pura, y comenzará a reproducirla.
+- **Reproducción sin latencia**: A diferencia de versiones anteriores, **los cambios son en tiempo real**. Si agregas un golpe de Kick mientras el audio está sonando, lo escucharás en la siguiente vuelta instantáneamente gracias al planificador nativo de Web Audio API.
+- **Botones de Silencio (Mute)**: Al lado de cada nombre de pista y debajo de cada perilla del mezclador verás botones **[ M ]**. Haz clic para mutear (silenciar) una pista al instante sin perder tu nivel de volumen. ¡Perfecto para hacer *drops* en vivo!
+- **El Sub-Bajo Automático**: La pista BASS usa síntesis de JavaScript pura y genera frecuencias súper bajas que **siguen automáticamente** la afinación que le des a tu bombo (Kick Freq), pero una octava más abajo.
 
-## 2. Looper Multipista (Grabación en Capas)
-Ideal para crear texturas complejas y tocar encima de ellas en vivo.
-- **Grabar un Loop**: Mientras el audio está sonando, haz clic en `[ REC EN VIVO ]`. Se pondrá rojo. Juega con el *Chaos Pad* o cambia las frecuencias.
-- **Detener y Añadir Capa**: Vuelve a hacer clic en `[ DETENER ]`. El audio que acabas de grabar se añadirá automáticamente a la lista "Looper Multipista (Capas)" en la parte inferior del panel izquierdo.
-- **Reproducción de Capas**: Estas pistas de la lista comenzarán a sonar en bucle por encima de todo. Puedes usar los botones **M** para silenciarlas (Mute) o **X** para borrarlas.
+## 2. Looper Multipista (Grabación en Capas) y Mastering
+Ideal para crear texturas complejas y exportarlas para tu DAW.
+- **Grabar un Loop**: Mientras el audio está sonando, haz clic en `[ REC EN VIVO ]`. Se pondrá rojo. Toca las perillas y graba automatizaciones manuales.
+- **Detener y Añadir Capa**: Vuelve a hacer clic en `[ DETENER ]`. El audio que acabas de grabar se añadirá a la lista de capas.
+- **Descargar Stems (.WAV)**: Con el nuevo botón de color neón `[ 💾 DESCARGAR STEMS (.WAV) ]` puedes exportar la mezcla directamente a tu computadora en calidad de estudio PCM 16-bit, lista para arrastrar a Ableton Live o cualquier otro DAW.
 
-## 3. Asignación MIDI Dinámica (MIDI Learn)
-¡Ya no necesitas programar los botones de tu Boss!
-- **Modo "Learn"**: Haz **Doble Clic** en cualquier Knob (Perilla giratoria) de la pantalla. Verás que su borde se enciende en **rojo**.
-- **Asignar Hardware**: Simplemente mueve un fader, gira una perilla o presiona un pad en tu caja de ritmo Boss o controlador MIDI.
-- **¡Listo!**: El borde rojo desaparecerá y ese control físico ahora manejará el volumen, tempo o frecuencia en la pantalla en tiempo real.
+## 3. Sincronización MIDI (Master Clock) y Asignación
+¡La app ahora domina tu hardware físico!
+- **Clock Out**: Al pulsar "GENERAR & PLAY", la aplicación enviará la señal MIDI Start (`0xFA`) y pulsos de reloj constantes (`0xF8` a 24 PPQN) a cualquier caja de ritmos conectada (ej. tu Roland/Boss). Tu hardware seguirá el BPM de la web a la perfección.
+- **Modo "Learn"**: Haz **Doble Clic** en cualquier Knob (Perilla giratoria) de la pantalla. Su borde se pondrá rojo. Mueve un fader o perilla en tu controlador MIDI para asignarlo permanentemente a esa función de la interfaz.
 
 ## 4. Estética de Estudio y Knobs 3D
-Hemos abandonado los "sliders" aburridos.
-- Para usar los nuevos Knobs (perillas), simplemente haz clic en ellos, **mantén presionado** y arrastra el ratón hacia **Arriba o Abajo** para girarlos.
-- Los volúmenes y frecuencias reaccionarán instantáneamente.
+- Para usar los nuevos Knobs, haz clic en ellos, **mantén presionado** y arrastra el ratón hacia **Arriba o Abajo** para girarlos. Todos los volúmenes, frecuencias isocrónicas y offsets binaurales reaccionarán instantáneamente.
 
----
-
-### 🚀 Sobre la Fase 5 (Arquitectura en Tiempo Real)
-He preparado el backend (`server.py`) creando los nuevos *Endpoints* de *One-Shot* (`/generate/kick`, `/generate/glitch`).
-Esto significa que el motor de audio ya está listo para la **siguiente gran evolución**: convertir la interfaz de React en un secuenciador de "Live Coding" sin latencia, donde no tendrás que pulsar "Generar" nunca más, sino que los ritmos cambiarán al instante. 
-
-¡Por ahora, disfruta tu nueva estación de audio, conecta tu Boss, y empieza a grabar tus loops! Mañana que lo pruebes, me cuentas qué tal la experiencia.
+¡Disfruta tu nueva estación de audio!

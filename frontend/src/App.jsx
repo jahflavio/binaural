@@ -210,12 +210,12 @@ function App() {
       nodes.carrierL.frequency.setTargetAtTime(params.carrier_freq, now, 0.05);
       nodes.carrierR.frequency.setTargetAtTime(params.carrier_freq + params.binaural_offset, now, 0.05);
       nodes.lfo.frequency.setTargetAtTime(params.isochronic_beat, now, 0.05);
-      nodes.masterGain.gain.setTargetAtTime(params.freq_vol, now, 0.05);
+      nodes.masterGain.gain.setTargetAtTime(params.mute_freq ? 0 : params.freq_vol, now, 0.05);
       if (nodes.textureGain) {
-        nodes.textureGain.gain.setTargetAtTime(params.texture_type !== 'none' ? params.texture_vol : 0, now, 0.05);
+        nodes.textureGain.gain.setTargetAtTime(params.mute_texture || params.texture_type === 'none' ? 0 : params.texture_vol, now, 0.05);
       }
     }
-  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type]);
+  }, [isPlaying, params.carrier_freq, params.binaural_offset, params.isochronic_beat, params.freq_vol, params.texture_vol, params.texture_type, params.mute_freq, params.mute_texture]);
 
   // Actualizar la fuente de textura si cambia el tipo
   useEffect(() => {

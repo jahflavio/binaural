@@ -20,6 +20,7 @@ function App() {
     snare_pattern: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
     hihat_pattern: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
     bass_pattern: [1,0,0,1,0,0,1,0,1,0,0,0,0,0,0,0],
+    global_mute_pattern: Array(16).fill(0),
     texture_type: 'none',
     texture_vol: 0.5,
     freq_vol: 0.5,
@@ -436,6 +437,12 @@ function App() {
 
       const scheduleNote = (beatNumber, time) => {
         const currentParams = paramsRef.current;
+        
+        // Mute Global por Paso
+        if (currentParams.global_mute_pattern && currentParams.global_mute_pattern[beatNumber] === 1) {
+          return; // Salta todos los sonidos de la caja de ritmo en este paso
+        }
+
         if (currentParams.kick_pattern[beatNumber] === 1 && audioBuffers.current.kick) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.kick

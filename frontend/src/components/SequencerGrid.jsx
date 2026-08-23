@@ -7,6 +7,36 @@ const SequencerGrid = ({ params, setParams }) => {
       <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr', gap: '0.5rem', alignItems: 'center' }}>
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.55rem', color: '#ff4444', fontWeight: 'bold', textAlign: 'center' }}>MUTE GLOBAL</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px', paddingBottom: '0.5rem', borderBottom: '1px solid #333' }}>
+          {params.global_mute_pattern?.map((val, i) => (
+            <div 
+              key={`globalmute-${i}`} 
+              onClick={() => {
+                const newP = [...params.global_mute_pattern]
+                newP[i] = newP[i] === 1 ? 0 : 1
+                setParams(p => ({...p, global_mute_pattern: newP}))
+              }}
+              style={{
+                height: '16px', 
+                backgroundColor: val ? '#ff4444' : '#222',
+                border: i % 4 === 0 ? '1px solid #666' : '1px solid #444',
+                borderRadius: '2px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: '0.5rem'
+              }} 
+            >
+              {val ? 'M' : ''}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{ fontSize: '0.6rem', color: '#ff4444', fontWeight: 'bold' }}>KICK</span>
           <button 
             onClick={() => setParams(p => ({...p, mute_beat: !p.mute_beat}))}

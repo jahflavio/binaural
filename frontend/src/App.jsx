@@ -19,6 +19,7 @@ function App() {
     glitch_pattern: [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0],
     snare_pattern: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
     hihat_pattern: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    bass_pattern: [1,0,0,1,0,0,1,0,1,0,0,0,0,0,0,0],
     texture_type: 'none',
     texture_vol: 0.5,
     freq_vol: 0.5,
@@ -26,6 +27,7 @@ function App() {
     glitch_vol: 0.4,
     snare_vol: 0.6,
     hihat_vol: 0.5,
+    bass_vol: 0.8,
     user_vol: 0.6
   })
   
@@ -463,6 +465,24 @@ function App() {
           gain.connect(filter)
           src.start(time)
         }
+        // Sub-Bass (Sintetizador FM nativo en JS)
+        if (currentParams.bass_pattern[beatNumber] === 1) {
+          const osc = audioContextRef.current.createOscillator()
+          const oscGain = audioContextRef.current.createGain()
+          // Frecuencia base del bajo dependiente de la del kick
+          const bassFreq = currentParams.kick_freq * 0.5 // Una octava más abajo
+          osc.type = 'triangle'
+          osc.frequency.setValueAtTime(bassFreq, time)
+          
+          // Envolvente tipo Bass (Decaimiento rápido, sin sustain)
+          oscGain.gain.setValueAtTime(currentParams.bass_vol, time)
+          oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.4)
+          
+          osc.connect(oscGain)
+          oscGain.connect(filter)
+          osc.start(time)
+          osc.stop(time + 0.5)
+        }
       }
 
       const nextNote = () => {
@@ -613,6 +633,7 @@ function App() {
               <Knob label="Glitch Vol" value={params.glitch_vol} min={0} max={1} onChange={v => setParams(p => ({...p, glitch_vol: v}))} onMidiLearn={() => handleMidiLearn('glitch_vol')} midiLearnActive={activeLearnParam === 'glitch_vol'} />
               <Knob label="Snare Vol" value={params.snare_vol} min={0} max={1} onChange={v => setParams(p => ({...p, snare_vol: v}))} onMidiLearn={() => handleMidiLearn('snare_vol')} midiLearnActive={activeLearnParam === 'snare_vol'} />
               <Knob label="HiHat Vol" value={params.hihat_vol} min={0} max={1} onChange={v => setParams(p => ({...p, hihat_vol: v}))} onMidiLearn={() => handleMidiLearn('hihat_vol')} midiLearnActive={activeLearnParam === 'hihat_vol'} />
+              <Knob label="Bass Vol" value={params.bass_vol} min={0} max={1} onChange={v => setParams(p => ({...p, bass_vol: v}))} onMidiLearn={() => handleMidiLearn('bass_vol')} midiLearnActive={activeLearnParam === 'bass_vol'} />
             </div>
           </div>
           

@@ -88,6 +88,27 @@ const SequencerGrid = ({ params, setParams }) => {
             />
           ))}
         </div>
+
+        <span style={{ fontSize: '0.7rem', color: '#8800ff' }}>BASS</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+          {params.bass_pattern.map((val, i) => (
+            <div 
+              key={`bass-${i}`} 
+              onClick={() => {
+                const newP = [...params.bass_pattern]
+                newP[i] = newP[i] === 1 ? 0 : 1
+                setParams(p => ({...p, bass_pattern: newP}))
+              }}
+              style={{
+                height: '24px', 
+                backgroundColor: val ? '#8800ff' : '#1a1a1a',
+                border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                borderRadius: '2px',
+                cursor: 'pointer'
+              }} 
+            />
+          ))}
+        </div>
       </div>
     </>
   );

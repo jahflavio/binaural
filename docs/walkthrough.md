@@ -21,12 +21,16 @@
 - **Componente `<Knob />` Personalizado:** Desarrollado desde cero con lógica de arrastre en el eje Y y rotación CSS matemática. Sustituye todos los *sliders* nativos.
 - **Visuales Oscuros:** Ajustes en Sombras, *Box-Shadows* y colores neón que dan un aspecto de mesa de mezclas profesional, integrándose perfectamente con el Torus Knot en 3D del visualizador.
 
-### 5. Fase 5 Completada: Arquitectura en Tiempo Real y Modularización
+### 5. Arquitectura en Tiempo Real y Modularización (Fase 5)
 - **Scheduler de Precisión:** El frontend ya no depende de Python para mezclar los golpes del secuenciador. Ahora usa un sistema de *Lookahead* en Javascript para disparar *One-Shots* sincronizados con extrema precisión usando `AudioContext.currentTime`.
 - **Modularización (Fase 5.3):** Se eliminó el código "espagueti" del archivo monolítico `App.jsx`, extrayendo la interfaz a componentes reutilizables dentro de `src/components/`:
   - `Knob.jsx`
   - `SequencerGrid.jsx`
   - `Visualizer3D.jsx`
+
+### 6. Mastering & Hardware Sync (Fase 6)
+- **Exportación WAV Nativa:** Hemos construido un codificador PCM manual en `utils/wavExporter.js`. Ahora, con el botón "Descargar Stems (.WAV)" en el panel del Looper, puedes bajarte las capas grabadas con calidad de estudio listas para Ableton.
+- **Sincronización MIDI Clock:** La app ahora domina el hardware físico enviando pulsos MIDI de sincronización (0xF8 a 24 PPQN). Tu Boss u otra caja de ritmos comenzará a sonar al hacer clic en "GENERAR & PLAY" (MIDI Start - 0xFA) y se adaptará instantáneamente al BPM que marques en la web.
 
 ## 🧪 Próximos Pasos Recomendados (Testing)
 1. Inicia el servidor de Python con `uvicorn server:app --reload`.

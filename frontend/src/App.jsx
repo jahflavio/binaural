@@ -97,6 +97,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false)
   const [layers, setLayers] = useState([])
   const [activeLearnParam, setActiveLearnParam] = useState(null)
+  const [isVisualsActive, setIsVisualsActive] = useState(true)
   
   const paramsRef = useRef(params)
   useEffect(() => { paramsRef.current = params }, [params])
@@ -603,17 +604,19 @@ function App() {
           const gain = audioContextRef.current.createGain()
           gain.gain.value = currentParams.mute_beat ? 0 : currentParams.beat_vol
           src.connect(gain)
+          // Kick va DIRECTAMENTE al filter (exento del sidechain, para que no se ducke a sí mismo)
           gain.connect(filter)
           src.start(time)
+          src.onended = () => { try { src.disconnect(); gain.disconnect(); } catch(e){} }
           
-          // Sidechain Ducking
+          // Sidechain Ducking — aplica sobre el bus de sintetizadores
           if (currentParams.sidechain_amount > 0 && synthNodesRef.current.sidechainGain) {
-            const duckVal = Math.max(0.1, 1.0 - currentParams.sidechain_amount);
+            const duckVal = Math.max(0.05, 1.0 - currentParams.sidechain_amount);
             const scNode = synthNodesRef.current.sidechainGain.gain;
             scNode.cancelScheduledValues(time);
             scNode.setValueAtTime(1.0, time);
-            scNode.setTargetAtTime(duckVal, time + 0.01, 0.01);
-            scNode.setTargetAtTime(1.0, time + 0.1, 0.15); // Release
+            scNode.setTargetAtTime(duckVal, time + 0.005, 0.015);
+            scNode.setTargetAtTime(1.0, time + 0.08, 0.12); // Release
           }
         }
         if (currentParams.snare_pattern[beatNumber] === 1 && audioBuffers.current.snare && Math.random() <= currentParams.snare_prob[beatNumber]) {
@@ -625,6 +628,7 @@ function App() {
           if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
           else gain.connect(filter)
           src.start(time)
+          src.onended = () => { try { src.disconnect(); gain.disconnect(); } catch(e){} }
         }
         if (currentParams.hihat_pattern[beatNumber] === 1 && audioBuffers.current.hihat && Math.random() <= currentParams.hihat_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
@@ -635,6 +639,7 @@ function App() {
           if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
           else gain.connect(filter)
           src.start(time)
+          src.onended = () => { try { src.disconnect(); gain.disconnect(); } catch(e){} }
         }
         if (currentParams.glitch_pattern[beatNumber] === 1 && audioBuffers.current.glitch && Math.random() <= currentParams.glitch_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
@@ -645,6 +650,7 @@ function App() {
           if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
           else gain.connect(filter)
           src.start(time)
+          src.onended = () => { try { src.disconnect(); gain.disconnect(); } catch(e){} }
         }
         if (currentParams.bass_pattern[beatNumber] === 1 && Math.random() <= currentParams.bass_prob[beatNumber]) {
           const osc = audioContextRef.current.createOscillator()
@@ -661,6 +667,7 @@ function App() {
           else gain.connect(filter)
           osc.start(time)
           osc.stop(time + 0.5)
+          osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch(e){} }
         }
       }
       
@@ -1085,7 +1092,7 @@ function App() {
                 id="rec-btn"
                 className={`preset-btn mono ${isRecording ? 'recording' : ''}`}
                 style={{ flex: 1, borderColor: isRecording ? '#ff4444' : '#555', color: isRecording ? '#ff4444' : '#aaa' }}
-                onClick={startRecording}
+                onClick={handleRecord}
                 disabled={!isPlaying || isLoading}
               >
                 {isRecording ? '● GRABANDO...' : '● REC EN VIVO [R]'}
@@ -1094,7 +1101,7 @@ function App() {
                 id="stop-rec-btn"
                 className="preset-btn mono"
                 style={{ flex: 1 }}
-                onClick={stopRecording}
+                onClick={handleRecord}
                 disabled={!isRecording}
               >
                 ■ DETENER [R]
@@ -1104,8 +1111,26 @@ function App() {
         </aside>
         
         <section className="visualizer-container" style={{ position: 'relative' }}>
-          <div className="status-overlay mono">
-            {isPlaying ? (isRecording ? "STATUS: LIVE RECORDING" : "STATUS: ANALYZING AUDIO STREAM") : "STATUS: IDLE"}
+          <div className="status-overlay mono" style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem' }}>
+            <span>{isPlaying ? (isRecording ? "STATUS: LIVE RECORDING" : "STATUS: ANALYZING AUDIO STREAM") : "STATUS: IDLE"}</span>
+            <button
+              onClick={() => setIsVisualsActive(v => !v)}
+              style={{
+                background: isVisualsActive ? '#00ffcc22' : '#33333388',
+                color: isVisualsActive ? '#00ffcc' : '#666',
+                border: `1px solid ${isVisualsActive ? '#00ffcc' : '#555'}`,
+                padding: '2px 10px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.65rem',
+                fontFamily: 'monospace',
+                fontWeight: 'bold',
+                letterSpacing: '0.05em',
+                transition: 'all 0.2s'
+              }}
+            >
+              {isVisualsActive ? '[ VIS: ON ]' : '[ VIS: OFF ]'}
+            </button>
           </div>
           <div 
             ref={chaosPadRef}
@@ -1115,7 +1140,7 @@ function App() {
             onPointerLeave={handlePointerLeave}
             style={{ width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none', position: 'absolute', top: 0, left: 0, zIndex: 10 }}
           ></div>
-          <Visualizer3D analyserRef={analyserRef} />
+          <Visualizer3D analyserRef={analyserRef} isActive={isVisualsActive} />
         </section>
       </main>
     </div>

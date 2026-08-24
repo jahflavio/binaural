@@ -1,9 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-const Visualizer3D = ({ analyserRef }) => {
+const Visualizer3D = ({ analyserRef, isActive }) => {
   const canvasRef = useRef(null);
   const requestRef = useRef(null);
+  // Pre-allocar arrays FUERA del loop de animación — elimina presión del GC
+  const timeDataRef = useRef(null);
+  const freqDataRef = useRef(null);
 
   useEffect(() => {
     const scene = new THREE.Scene()
@@ -28,29 +31,32 @@ const Visualizer3D = ({ analyserRef }) => {
     const originalPositions = geometry.attributes.position.array.slice()
     
     const draw = () => {
-      if (!analyserRef.current || !mesh) {
-        requestRef.current = requestAnimationFrame(draw)
-        return
+      requestRef.current = requestAnimationFrame(draw)
+
+      if (!analyserRef.current || !mesh) return
+      
+      // Inicializar arrays si aún no existen o si cambió el tamaño del buffer
+      if (!timeDataRef.current || timeDataRef.current.length !== analyserRef.current.frequencyBinCount) {
+        const bufferLength = analyserRef.current.frequencyBinCount
+        timeDataRef.current = new Uint8Array(bufferLength)
+        freqDataRef.current = new Uint8Array(bufferLength)
       }
       
-      const bufferLength = analyserRef.current.frequencyBinCount
-      const timeData = new Uint8Array(bufferLength)
-      const freqData = new Uint8Array(bufferLength)
-      
-      analyserRef.current.getByteTimeDomainData(timeData)
-      analyserRef.current.getByteFrequencyData(freqData)
+      analyserRef.current.getByteTimeDomainData(timeDataRef.current)
+      analyserRef.current.getByteFrequencyData(freqDataRef.current)
       
       let bassEnergy = 0;
-      for(let i = 0; i < 20; i++) bassEnergy += freqData[i];
+      for(let i = 0; i < 20; i++) bassEnergy += freqDataRef.current[i];
       bassEnergy = bassEnergy / 20;
       
       mesh.rotation.x += 0.002 + (bassEnergy / 10000)
       mesh.rotation.y += 0.003 + (bassEnergy / 10000)
       
       const positions = geometry.attributes.position.array
+      const bufLen = timeDataRef.current.length;
       for (let i = 0; i < positions.length; i += 3) {
-        const dataIndex = (i / 3) % bufferLength
-        const v = timeData[dataIndex] / 128.0 
+        const dataIndex = (i / 3) % bufLen
+        const v = timeDataRef.current[dataIndex] / 128.0 
         
         const ox = originalPositions[i]
         const oy = originalPositions[i+1]
@@ -73,7 +79,6 @@ const Visualizer3D = ({ analyserRef }) => {
       material.color.setHSL(hue / 360, 0.8, 0.3 + (bassEnergy / 510))
       
       renderer.render(scene, camera)
-      requestRef.current = requestAnimationFrame(draw)
     }
     
     requestRef.current = requestAnimationFrame(draw)
@@ -101,10 +106,28 @@ const Visualizer3D = ({ analyserRef }) => {
     }
   }, [analyserRef])
 
+  // Pausar / Reanudar loop de animación cuando isActive cambia
+  useEffect(() => {
+    if (!isActive) {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current)
+        requestRef.current = null
+      }
+    } else {
+      // Reanudar el loop — draw se auto-programa via requestAnimationFrame
+      if (!requestRef.current) {
+        const resume = () => { requestRef.current = requestAnimationFrame(resume) }
+        // Disparar render de reanudación
+        requestRef.current = requestAnimationFrame(resume)
+      }
+    }
+  }, [isActive])
+
   return (
     <div 
       className="visualizer-container" 
-      ref={canvasRef} 
+      ref={canvasRef}
+      style={{ opacity: isActive ? 1 : 0.15, transition: 'opacity 0.4s ease' }}
     />
   );
 };

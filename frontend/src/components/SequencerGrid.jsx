@@ -62,23 +62,32 @@ const SequencerGrid = ({ params, setParams }) => {
           >M</button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-          {params.kick_pattern.map((val, i) => (
+          {params.kick_pattern.map((val, i) => {
+            const prob = params.kick_prob ? params.kick_prob[i] : 1.0;
+            return (
             <div 
               key={`kick-${i}`} 
-              onClick={() => {
-                const newP = [...params.kick_pattern]
-                newP[i] = newP[i] === 1 ? 0 : 1
-                setParams(p => ({...p, kick_pattern: newP}))
+              onClick={(e) => {
+                if (e.shiftKey) {
+                  const newProb = [...(params.kick_prob || Array(16).fill(1.0))]
+                  newProb[i] = newProb[i] === 1.0 ? 0.66 : newProb[i] === 0.66 ? 0.33 : 1.0
+                  setParams(p => ({...p, kick_prob: newProb}))
+                } else {
+                  const newP = [...params.kick_pattern]
+                  newP[i] = newP[i] === 1 ? 0 : 1
+                  setParams(p => ({...p, kick_pattern: newP}))
+                }
               }}
               style={{
                 height: '24px', 
                 backgroundColor: val ? '#ff4444' : '#1a1a1a',
                 border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
                 borderRadius: '2px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                opacity: val ? prob : 1.0
               }} 
             />
-          ))}
+          )})}
         </div>
         
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -88,25 +97,34 @@ const SequencerGrid = ({ params, setParams }) => {
             style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_snare ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
           >M</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-          {params.snare_pattern.map((val, i) => (
-            <div 
-              key={`snare-${i}`} 
-              onClick={() => {
-                const newP = [...params.snare_pattern]
-                newP[i] = newP[i] === 1 ? 0 : 1
-                setParams(p => ({...p, snare_pattern: newP}))
-              }}
-              style={{
-                height: '24px', 
-                backgroundColor: val ? '#ffbb00' : '#1a1a1a',
-                border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                borderRadius: '2px',
-                cursor: 'pointer'
-              }} 
-            />
-          ))}
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+            {params.snare_pattern.map((val, i) => {
+              const prob = params.snare_prob ? params.snare_prob[i] : 1.0;
+              return (
+              <div 
+                key={`snare-${i}`} 
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    const newProb = [...(params.snare_prob || Array(16).fill(1.0))]
+                    newProb[i] = newProb[i] === 1.0 ? 0.66 : newProb[i] === 0.66 ? 0.33 : 1.0
+                    setParams(p => ({...p, snare_prob: newProb}))
+                  } else {
+                    const newP = [...params.snare_pattern]
+                    newP[i] = newP[i] === 1 ? 0 : 1
+                    setParams(p => ({...p, snare_pattern: newP}))
+                  }
+                }}
+                style={{
+                  height: '24px', 
+                  backgroundColor: val ? '#ffbb00' : '#1a1a1a',
+                  border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                  opacity: val ? prob : 1.0
+                }} 
+              />
+            )})}
+          </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{ fontSize: '0.6rem', color: '#aaff00', fontWeight: 'bold' }}>HI-HAT</span>
@@ -115,25 +133,34 @@ const SequencerGrid = ({ params, setParams }) => {
             style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_hihat ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
           >M</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-          {params.hihat_pattern.map((val, i) => (
-            <div 
-              key={`hihat-${i}`} 
-              onClick={() => {
-                const newP = [...params.hihat_pattern]
-                newP[i] = newP[i] === 1 ? 0 : 1
-                setParams(p => ({...p, hihat_pattern: newP}))
-              }}
-              style={{
-                height: '24px', 
-                backgroundColor: val ? '#aaff00' : '#1a1a1a',
-                border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                borderRadius: '2px',
-                cursor: 'pointer'
-              }} 
-            />
-          ))}
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+            {params.hihat_pattern.map((val, i) => {
+              const prob = params.hihat_prob ? params.hihat_prob[i] : 1.0;
+              return (
+              <div 
+                key={`hihat-${i}`} 
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    const newProb = [...(params.hihat_prob || Array(16).fill(1.0))]
+                    newProb[i] = newProb[i] === 1.0 ? 0.66 : newProb[i] === 0.66 ? 0.33 : 1.0
+                    setParams(p => ({...p, hihat_prob: newProb}))
+                  } else {
+                    const newP = [...params.hihat_pattern]
+                    newP[i] = newP[i] === 1 ? 0 : 1
+                    setParams(p => ({...p, hihat_pattern: newP}))
+                  }
+                }}
+                style={{
+                  height: '24px', 
+                  backgroundColor: val ? '#aaff00' : '#1a1a1a',
+                  border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                  opacity: val ? prob : 1.0
+                }} 
+              />
+            )})}
+          </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{ fontSize: '0.6rem', color: '#00ccff', fontWeight: 'bold' }}>GLITCH</span>
@@ -142,25 +169,34 @@ const SequencerGrid = ({ params, setParams }) => {
             style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_glitch ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
           >M</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-          {params.glitch_pattern.map((val, i) => (
-            <div 
-              key={`glitch-${i}`} 
-              onClick={() => {
-                const newP = [...params.glitch_pattern]
-                newP[i] = newP[i] === 1 ? 0 : 1
-                setParams(p => ({...p, glitch_pattern: newP}))
-              }}
-              style={{
-                height: '24px', 
-                backgroundColor: val ? '#00ccff' : '#1a1a1a',
-                border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                borderRadius: '2px',
-                cursor: 'pointer'
-              }} 
-            />
-          ))}
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+            {params.glitch_pattern.map((val, i) => {
+              const prob = params.glitch_prob ? params.glitch_prob[i] : 1.0;
+              return (
+              <div 
+                key={`glitch-${i}`} 
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    const newProb = [...(params.glitch_prob || Array(16).fill(1.0))]
+                    newProb[i] = newProb[i] === 1.0 ? 0.66 : newProb[i] === 0.66 ? 0.33 : 1.0
+                    setParams(p => ({...p, glitch_prob: newProb}))
+                  } else {
+                    const newP = [...params.glitch_pattern]
+                    newP[i] = newP[i] === 1 ? 0 : 1
+                    setParams(p => ({...p, glitch_pattern: newP}))
+                  }
+                }}
+                style={{
+                  height: '24px', 
+                  backgroundColor: val ? '#00ccff' : '#1a1a1a',
+                  border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                  opacity: val ? prob : 1.0
+                }} 
+              />
+            )})}
+          </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <span style={{ fontSize: '0.6rem', color: '#8800ff', fontWeight: 'bold' }}>BASS</span>
@@ -169,25 +205,38 @@ const SequencerGrid = ({ params, setParams }) => {
             style={{ marginTop: '2px', padding: '1px 6px', fontSize: '0.5rem', background: params.mute_bass ? '#ff4444' : '#222', border: '1px solid #444', borderRadius: '3px', cursor: 'pointer', color: '#fff' }}
           >M</button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
-          {params.bass_pattern.map((val, i) => (
-            <div 
-              key={`bass-${i}`} 
-              onClick={() => {
-                const newP = [...params.bass_pattern]
-                newP[i] = newP[i] === 1 ? 0 : 1
-                setParams(p => ({...p, bass_pattern: newP}))
-              }}
-              style={{
-                height: '24px', 
-                backgroundColor: val ? '#8800ff' : '#1a1a1a',
-                border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
-                borderRadius: '2px',
-                cursor: 'pointer'
-              }} 
-            />
-          ))}
-        </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '2px' }}>
+            {params.bass_pattern.map((val, i) => {
+              const prob = params.bass_prob ? params.bass_prob[i] : 1.0;
+              return (
+              <div 
+                key={`bass-${i}`} 
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    const newProb = [...(params.bass_prob || Array(16).fill(1.0))]
+                    newProb[i] = newProb[i] === 1.0 ? 0.66 : newProb[i] === 0.66 ? 0.33 : 1.0
+                    setParams(p => ({...p, bass_prob: newProb}))
+                  } else {
+                    const newP = [...params.bass_pattern]
+                    newP[i] = newP[i] === 1 ? 0 : 1
+                    setParams(p => ({...p, bass_pattern: newP}))
+                  }
+                }}
+                style={{
+                  height: '24px', 
+                  backgroundColor: val ? '#8800ff' : '#1a1a1a',
+                  border: i % 4 === 0 ? '1px solid #555' : '1px solid #333',
+                  borderRadius: '2px',
+                  cursor: 'pointer',
+                  opacity: val ? prob : 1.0
+                }} 
+              />
+            )})}
+          </div>
+          
+          <div style={{ gridColumn: '1 / -1', marginTop: '10px', fontSize: '0.6rem', color: '#888', textAlign: 'center' }}>
+            💡 Tip: <b>Shift + Click</b> en un paso activo para cambiar su probabilidad (100% → 66% → 33%). Transparencia = Menor probabilidad.
+          </div>
       </div>
     </>
   );

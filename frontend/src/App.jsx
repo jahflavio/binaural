@@ -7,6 +7,44 @@ import SequencerGrid from './components/SequencerGrid'
 import Visualizer3D from './components/Visualizer3D'
 import { audioBufferToWav } from './utils/wavExporter'
 
+const FREQUENCY_PRESETS = {
+  Solfeggio: [
+    { name: "174 Hz (Alivio / Base)", freq: 174, lfo: 4, kick: 43.5 },
+    { name: "285 Hz (Regeneración)", freq: 285, lfo: 5, kick: 71.25 },
+    { name: "396 Hz (Root / Liberación)", freq: 396, lfo: 6, kick: 49.5 },
+    { name: "417 Hz (Sacral / Cambio)", freq: 417, lfo: 7, kick: 52.12 },
+    { name: "528 Hz (Solar Plexus / Milagros)", freq: 528, lfo: 8, kick: 66 },
+    { name: "639 Hz (Heart / Conexión)", freq: 639, lfo: 9, kick: 79.87 },
+    { name: "741 Hz (Throat / Intuición)", freq: 741, lfo: 10, kick: 46.31 },
+    { name: "852 Hz (Third Eye / Claridad)", freq: 852, lfo: 11, kick: 53.25 },
+    { name: "963 Hz (Crown / Divinidad)", freq: 963, lfo: 12, kick: 60.18 },
+  ],
+  Afinacion: [
+    { name: "432 Hz (Naturaleza)", freq: 432, lfo: 8, kick: 54 },
+    { name: "440 Hz (Estándar)", freq: 440, lfo: 8, kick: 55 },
+  ],
+  Somaticas: [
+    { name: "40 Hz (Corteza Cerebral)", freq: 40, lfo: 40, kick: 40 },
+    { name: "50 Hz (Sistema Muscular)", freq: 50, lfo: 2, kick: 50 },
+    { name: "60 Hz (Sistema Esquelético)", freq: 60, lfo: 3, kick: 60 },
+    { name: "62 Hz (SNC)", freq: 62, lfo: 4, kick: 62 },
+    { name: "70 Hz (Memoria Somática)", freq: 70, lfo: 5, kick: 70 },
+    { name: "80 Hz (Nervio Vago)", freq: 80, lfo: 6, kick: 80 },
+    { name: "95 Hz (Articulaciones)", freq: 95, lfo: 7, kick: 47.5 },
+    { name: "100 Hz (Flujo Linfático)", freq: 100, lfo: 8, kick: 50 },
+    { name: "111 Hz (Templo Antiguo / Trance)", freq: 111, lfo: 2, kick: 55.5 },
+    { name: "144 Hz (Soberanía Energética)", freq: 144, lfo: 9, kick: 72 },
+    { name: "256 Hz (Energía Vital)", freq: 256, lfo: 10, kick: 64 },
+  ],
+  Brainwaves: [
+    { name: "Delta (2 Hz - Sueño Profundo)", freq: 100, lfo: 2, kick: 50 },
+    { name: "Theta (6 Hz - Meditación)", freq: 136.1, lfo: 6, kick: 68.05 },
+    { name: "Alpha (10 Hz - Calma)", freq: 211.44, lfo: 10, kick: 52.86 },
+    { name: "Beta (15 Hz - Enfoque)", freq: 300, lfo: 15, kick: 75 },
+    { name: "Gamma (40 Hz - Insight)", freq: 400, lfo: 40, kick: 50 },
+  ]
+};
+
 function App() {
   const [params, setParams] = useState({
     duration: 15,
@@ -35,15 +73,21 @@ function App() {
     delay_mix: 0.0,
     reverb_time: 2.5,
     reverb_mix: 0.0,
+    sidechain_amount: 0.0,
     mute_texture: false,
     mute_freq: false,
     mute_beat: false,
-    mute_glitch: false,
     mute_snare: false,
     mute_hihat: false,
     mute_bass: false,
+    mute_glitch: false,
     auto_lfo: false,
-    midi_slave: false
+    midi_slave: false,
+    kick_prob: Array(16).fill(1.0),
+    snare_prob: Array(16).fill(1.0),
+    hihat_prob: Array(16).fill(1.0),
+    glitch_prob: Array(16).fill(1.0),
+    bass_prob: Array(16).fill(1.0)
   })
   
   const [selectedFile, setSelectedFile] = useState(null)
@@ -66,7 +110,7 @@ function App() {
   const midiTicksCountRef = useRef(0)
   
   const synthNodesRef = useRef({
-    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, textureSource: null, textureGain: null, dcOffset: null, delay: null, delayFeedback: null, delayMix: null, convolver: null, reverbMix: null
+    carrierL: null, carrierR: null, lfo: null, carrierGainL: null, carrierGainR: null, lfoGain: null, masterGain: null, sidechainGain: null, textureSource: null, textureGain: null, dcOffset: null, delay: null, delayFeedback: null, delayMix: null, convolver: null, reverbMix: null
   })
   
   const layerSourcesRef = useRef({})
@@ -310,18 +354,15 @@ function App() {
     }
   }, [isPlaying, params.texture_type]);
 
-  const applyPreset = (preset) => {
-    if (preset === 'vagal') {
-      setParams(p => ({ ...p, carrier_freq: 80, isochronic_beat: 4, kick_freq: 40, bpm: 90 }))
-    } else if (preset === 'domo') {
-      setParams(p => ({ ...p, carrier_freq: 111, isochronic_beat: 2, kick_freq: 55.5, bpm: 60 }))
-    } else if (preset === 'cosmic') {
-      setParams(p => ({ ...p, carrier_freq: 432, isochronic_beat: 8, kick_freq: 54, bpm: 108 }))
-    } else if (preset === 'earth') {
-      setParams(p => ({ ...p, carrier_freq: 528, isochronic_beat: 7.83, kick_freq: 55.5, bpm: 120 }))
-    } else if (preset === 'pineal') {
-      setParams(p => ({ ...p, carrier_freq: 963, isochronic_beat: 9, kick_freq: 60, bpm: 90 }))
-    }
+  const applyPreset = (presetStr) => {
+    if (!presetStr) return;
+    const preset = JSON.parse(presetStr);
+    setParams(p => ({ 
+      ...p, 
+      carrier_freq: preset.freq, 
+      isochronic_beat: preset.lfo, 
+      kick_freq: preset.kick 
+    }));
   }
 
   const generateAndPlay = async () => {
@@ -361,6 +402,11 @@ function App() {
       filter.type = 'lowpass'
       filter.frequency.value = 20000 // default open
       filterRef.current = filter
+
+      // Setup Sidechain Node
+      const sidechainGain = audioContextRef.current.createGain()
+      sidechainGain.gain.value = 1.0
+      synthNodesRef.current.sidechainGain = sidechainGain
       
       // Setup Delay Node (Efecto Espacial)
       const delay = audioContextRef.current.createDelay(5.0)
@@ -410,7 +456,7 @@ function App() {
         externalSource = audioContextRef.current.createBufferSource()
         externalSource.buffer = droneBuffer
         externalSource.loop = true
-        externalSource.connect(filter)
+        externalSource.connect(sidechainGain)
         externalSource.start(0)
         sourceRef.current = externalSource
       } else {
@@ -468,7 +514,7 @@ function App() {
         
         merger.connect(masterGain);
         textureGain.connect(masterGain);
-        masterGain.connect(filter);
+        masterGain.connect(sidechainGain);
         
         carrierL.start(now);
         carrierR.start(now);
@@ -477,7 +523,7 @@ function App() {
         
         synthNodesRef.current = {
           ...synthNodesRef.current,
-          carrierL, carrierR, lfo, carrierGainL, carrierGainR, lfoGain, masterGain, textureGain, dcOffset, merger
+          carrierL, carrierR, lfo, carrierGainL, carrierGainR, lfoGain, masterGain, sidechainGain, textureGain, dcOffset, merger
         };
 
         if (params.texture_type !== 'none') {
@@ -502,8 +548,9 @@ function App() {
       }
       
       // Enrutamiento Final
+      sidechainGain.connect(filter)
       filter.connect(delay)
-      filter.connect(convolver) // Enviar al reverb también
+      filter.connect(convolver)
       filter.connect(panner)
       
       delayMix.connect(panner)
@@ -547,10 +594,10 @@ function App() {
         
         // Mute Global por Paso
         if (currentParams.global_mute_pattern && currentParams.global_mute_pattern[beatNumber] === 1) {
-          return; // Salta todos los sonidos de la caja de ritmo en este paso
+          return;
         }
 
-        if (currentParams.kick_pattern[beatNumber] === 1 && audioBuffers.current.kick) {
+        if (currentParams.kick_pattern[beatNumber] === 1 && audioBuffers.current.kick && Math.random() <= currentParams.kick_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.kick
           const gain = audioContextRef.current.createGain()
@@ -558,50 +605,60 @@ function App() {
           src.connect(gain)
           gain.connect(filter)
           src.start(time)
+          
+          // Sidechain Ducking
+          if (currentParams.sidechain_amount > 0 && synthNodesRef.current.sidechainGain) {
+            const duckVal = Math.max(0.1, 1.0 - currentParams.sidechain_amount);
+            const scNode = synthNodesRef.current.sidechainGain.gain;
+            scNode.cancelScheduledValues(time);
+            scNode.setValueAtTime(1.0, time);
+            scNode.setTargetAtTime(duckVal, time + 0.01, 0.01);
+            scNode.setTargetAtTime(1.0, time + 0.1, 0.15); // Release
+          }
         }
-        if (currentParams.snare_pattern[beatNumber] === 1 && audioBuffers.current.snare) {
+        if (currentParams.snare_pattern[beatNumber] === 1 && audioBuffers.current.snare && Math.random() <= currentParams.snare_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.snare
           const gain = audioContextRef.current.createGain()
           gain.gain.value = currentParams.mute_snare ? 0 : currentParams.snare_vol
           src.connect(gain)
-          gain.connect(filter)
+          if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
+          else gain.connect(filter)
           src.start(time)
         }
-        if (currentParams.hihat_pattern[beatNumber] === 1 && audioBuffers.current.hihat) {
+        if (currentParams.hihat_pattern[beatNumber] === 1 && audioBuffers.current.hihat && Math.random() <= currentParams.hihat_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.hihat
           const gain = audioContextRef.current.createGain()
           gain.gain.value = currentParams.mute_hihat ? 0 : currentParams.hihat_vol
           src.connect(gain)
-          gain.connect(filter)
+          if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
+          else gain.connect(filter)
           src.start(time)
         }
-        if (currentParams.glitch_pattern[beatNumber] === 1 && audioBuffers.current.glitch) {
+        if (currentParams.glitch_pattern[beatNumber] === 1 && audioBuffers.current.glitch && Math.random() <= currentParams.glitch_prob[beatNumber]) {
           const src = audioContextRef.current.createBufferSource()
           src.buffer = audioBuffers.current.glitch
           const gain = audioContextRef.current.createGain()
           gain.gain.value = currentParams.mute_glitch ? 0 : currentParams.glitch_vol
           src.connect(gain)
-          gain.connect(filter)
+          if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
+          else gain.connect(filter)
           src.start(time)
         }
-        // Sub-Bass (Sintetizador FM nativo en JS)
-        if (currentParams.bass_pattern[beatNumber] === 1) {
+        if (currentParams.bass_pattern[beatNumber] === 1 && Math.random() <= currentParams.bass_prob[beatNumber]) {
           const osc = audioContextRef.current.createOscillator()
-          const oscGain = audioContextRef.current.createGain()
-          // Frecuencia base del bajo dependiente de la del kick
-          const bassFreq = currentParams.kick_freq * 0.5 // Una octava más abajo
-          osc.type = 'triangle'
-          osc.frequency.setValueAtTime(bassFreq, time)
+          const gain = audioContextRef.current.createGain()
+          osc.type = 'sine'
+          osc.frequency.value = currentParams.kick_freq / 2
           
-          // Envolvente tipo Bass (Decaimiento rápido, sin sustain)
-          const targetVol = currentParams.mute_bass ? 0 : currentParams.bass_vol
-          oscGain.gain.setValueAtTime(targetVol, time)
-          oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.4)
+          gain.gain.setValueAtTime(0, time)
+          gain.gain.linearRampToValueAtTime((currentParams.mute_bass ? 0 : currentParams.bass_vol) * 0.8, time + 0.05)
+          gain.gain.exponentialRampToValueAtTime(0.001, time + 0.4)
           
-          osc.connect(oscGain)
-          oscGain.connect(filter)
+          osc.connect(gain)
+          if (synthNodesRef.current.sidechainGain) gain.connect(synthNodesRef.current.sidechainGain)
+          else gain.connect(filter)
           osc.start(time)
           osc.stop(time + 0.5)
         }
@@ -737,6 +794,52 @@ function App() {
     filterRef.current.frequency.setTargetAtTime(20000, now, 0.2)
   }
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ignore if typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      switch(e.key.toLowerCase()) {
+        case ' ': // Space
+          e.preventDefault();
+          if (isPlayingRef.current) stopAudio(); else generateAndPlay();
+          break;
+        case 'm':
+          setParams(p => {
+            const allMuted = p.mute_beat && p.mute_snare && p.mute_hihat && p.mute_glitch && p.mute_bass;
+            return {
+              ...p, 
+              mute_beat: !allMuted, 
+              mute_snare: !allMuted, 
+              mute_hihat: !allMuted, 
+              mute_glitch: !allMuted, 
+              mute_bass: !allMuted 
+            };
+          });
+          break;
+        case '1': setParams(p => ({...p, mute_beat: !p.mute_beat})); break;
+        case '2': setParams(p => ({...p, mute_snare: !p.mute_snare})); break;
+        case '3': setParams(p => ({...p, mute_hihat: !p.mute_hihat})); break;
+        case '4': setParams(p => ({...p, mute_glitch: !p.mute_glitch})); break;
+        case '5': setParams(p => ({...p, mute_bass: !p.mute_bass})); break;
+        case 'r':
+          const recBtn = document.getElementById('rec-btn');
+          const stopRecBtn = document.getElementById('stop-rec-btn');
+          if (recBtn && !recBtn.disabled) recBtn.click();
+          else if (stopRecBtn && !stopRecBtn.disabled) stopRecBtn.click();
+          break;
+        case 'c':
+          const chaosBtn = document.getElementById('chaos-btn');
+          if (chaosBtn) chaosBtn.click();
+          break;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="app-container">
       <header className="header">
@@ -825,6 +928,7 @@ function App() {
               }} onMidiLearn={() => handleMidiLearn('reverb_time')} midiLearnActive={activeLearnParam === 'reverb_time'} />
               
               <Knob label="Reverb Mix" value={params.reverb_mix} min={0} max={1} onChange={v => setParams(p => ({...p, reverb_mix: v}))} onMidiLearn={() => handleMidiLearn('reverb_mix')} midiLearnActive={activeLearnParam === 'reverb_mix'} />
+              <Knob label="Sidechain" value={params.sidechain_amount} min={0} max={1} onChange={v => setParams(p => ({...p, sidechain_amount: v}))} onMidiLearn={() => handleMidiLearn('sidechain_amount')} midiLearnActive={activeLearnParam === 'sidechain_amount'} />
             </div>
           </div>
 
@@ -868,7 +972,12 @@ function App() {
             </div>
             
             <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', marginTop: '1rem' }}>
-              <strong style={{color: 'var(--accent)'}}>Guía Rápida:</strong> Haz clic en los cuadros para crear tu patrón. Haz clic en GENERAR & PLAY para empezar a escuchar el bucle. Cambia los volúmenes en el mezclador.
+              <strong style={{color: 'var(--accent)'}}>Atajos de Teclado:</strong><br/>
+              - <kbd>ESPACIO</kbd>: Play / Stop<br/>
+              - <kbd>1</kbd> a <kbd>5</kbd>: Mutear Pistas (Kick, Snare, Hihat, Glitch, Bass)<br/>
+              - <kbd>M</kbd>: Mutear / Desmutear TODAS las pistas<br/>
+              - <kbd>R</kbd>: Iniciar / Detener Grabación (Loop)<br/>
+              - <kbd>C</kbd>: Disparar Caos Euclidiano
             </div>
             
             <SequencerGrid params={params} setParams={setParams} />
@@ -941,13 +1050,24 @@ function App() {
           )}
 
           <div className="control-group">
-            <label style={{color: 'var(--accent)'}}>Protocolos (Presets)</label>
-            <div className="presets-container">
-              <button className="preset-btn mono" onClick={() => applyPreset('vagal')}>Homeostasis Vagal (80Hz)</button>
-              <button className="preset-btn mono" onClick={() => applyPreset('domo')}>Domo Acústico (111Hz)</button>
-              <button className="preset-btn mono" onClick={() => applyPreset('cosmic')}>Armonía Cósmica (432Hz)</button>
-              <button className="preset-btn mono" onClick={() => applyPreset('earth')}>Sincronía Tierra (528Hz)</button>
-              <button className="preset-btn mono" onClick={() => applyPreset('pineal')}>Activación Pineal (963Hz)</button>
+            <label style={{color: 'var(--accent)'}}>Protocolos y Frecuencias (Presets)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <select className="preset-btn mono" style={{textAlign: 'left', padding: '0.5rem'}} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="">-- Solfeggio --</option>
+                {FREQUENCY_PRESETS.Solfeggio.map(p => <option key={p.freq} value={JSON.stringify(p)}>{p.name}</option>)}
+              </select>
+              <select className="preset-btn mono" style={{textAlign: 'left', padding: '0.5rem'}} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="">-- Somáticas --</option>
+                {FREQUENCY_PRESETS.Somaticas.map(p => <option key={p.freq} value={JSON.stringify(p)}>{p.name}</option>)}
+              </select>
+              <select className="preset-btn mono" style={{textAlign: 'left', padding: '0.5rem'}} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="">-- Ondas Cerebrales --</option>
+                {FREQUENCY_PRESETS.Brainwaves.map(p => <option key={p.freq} value={JSON.stringify(p)}>{p.name}</option>)}
+              </select>
+              <select className="preset-btn mono" style={{textAlign: 'left', padding: '0.5rem'}} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="">-- Afinaciones --</option>
+                {FREQUENCY_PRESETS.Afinacion.map(p => <option key={p.freq} value={JSON.stringify(p)}>{p.name}</option>)}
+              </select>
             </div>
           </div>
           
@@ -962,17 +1082,22 @@ function App() {
                 {isLoading ? "RENDERIZANDO..." : isPlaying ? "[ STOP ]" : "[ GENERAR & PLAY ]"}
               </button>
               <button 
-                className="action-btn mono" 
-                onClick={handleRecord}
-                disabled={!isPlaying}
-                style={{ 
-                  flex: 1, 
-                  backgroundColor: isRecording ? '#cc0000' : 'var(--bg-secondary)', 
-                  color: isRecording ? '#fff' : 'var(--text-primary)',
-                  borderColor: isRecording ? '#ff4444' : 'var(--border)'
-                }}
+                id="rec-btn"
+                className={`preset-btn mono ${isRecording ? 'recording' : ''}`}
+                style={{ flex: 1, borderColor: isRecording ? '#ff4444' : '#555', color: isRecording ? '#ff4444' : '#aaa' }}
+                onClick={startRecording}
+                disabled={!isPlaying || isLoading}
               >
-                {isRecording ? "[ DETENER ]" : "[ REC EN VIVO ]"}
+                {isRecording ? '● GRABANDO...' : '● REC EN VIVO [R]'}
+              </button>
+              <button 
+                id="stop-rec-btn"
+                className="preset-btn mono"
+                style={{ flex: 1 }}
+                onClick={stopRecording}
+                disabled={!isRecording}
+              >
+                ■ DETENER [R]
               </button>
             </div>
           </div>

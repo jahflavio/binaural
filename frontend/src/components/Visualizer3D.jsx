@@ -4,6 +4,7 @@ import * as THREE from 'three';
 const Visualizer3D = ({ analyserRef, isActive }) => {
   const canvasRef = useRef(null);
   const requestRef = useRef(null);
+  const drawRef = useRef(null); // referencia al loop real para poder resumirlo
   // Pre-allocar arrays FUERA del loop de animación — elimina presión del GC
   const timeDataRef = useRef(null);
   const freqDataRef = useRef(null);
@@ -81,6 +82,8 @@ const Visualizer3D = ({ analyserRef, isActive }) => {
       renderer.render(scene, camera)
     }
     
+    // Guardar draw en ref para poder resumir desde el useEffect de isActive
+    drawRef.current = draw;
     requestRef.current = requestAnimationFrame(draw)
     
     const handleResize = () => {
@@ -114,11 +117,9 @@ const Visualizer3D = ({ analyserRef, isActive }) => {
         requestRef.current = null
       }
     } else {
-      // Reanudar el loop — draw se auto-programa via requestAnimationFrame
-      if (!requestRef.current) {
-        const resume = () => { requestRef.current = requestAnimationFrame(resume) }
-        // Disparar render de reanudación
-        requestRef.current = requestAnimationFrame(resume)
+      // Reanudar — usar el draw real guardado en drawRef
+      if (!requestRef.current && drawRef.current) {
+        requestRef.current = requestAnimationFrame(drawRef.current)
       }
     }
   }, [isActive])

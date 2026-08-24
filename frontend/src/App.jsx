@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import * as THREE from 'three'
 import './App.css'
 
@@ -98,6 +98,13 @@ function App() {
   const [layers, setLayers] = useState([])
   const [activeLearnParam, setActiveLearnParam] = useState(null)
   const [isVisualsActive, setIsVisualsActive] = useState(true)
+  const [currentStep, setCurrentStep] = useState(-1)
+  const [performMode, setPerformMode] = useState(false)
+  const [vuLevels, setVuLevels] = useState(Array(8).fill(0))
+  
+  const currentStepRef = useRef(-1)
+  const tapsRef = useRef([])
+  const vuAnimRef = useRef(null)
   
   const paramsRef = useRef(params)
   useEffect(() => { paramsRef.current = params }, [params])
@@ -145,6 +152,23 @@ function App() {
       
       for (let input of midiAccess.inputs.values()) {
         input.onmidimessage = getMIDIMessage
+      }
+
+      // BUG 4 FIX: detectar dispositivos conectados DESPUÉS de cargar la app
+      midiAccess.onstatechange = (e) => {
+        console.log(`MIDI device ${e.port.name} ${e.port.state}`)
+        if (e.port.type === 'input') {
+          if (e.port.state === 'connected') {
+            e.port.onmidimessage = getMIDIMessage
+          } else {
+            e.port.onmidimessage = null
+          }
+        }
+        if (e.port.type === 'output') {
+          const outputs = []
+          midiAccess.outputs.forEach(port => outputs.push(port))
+          midiOutputsRef.current = outputs
+        }
       }
     }
     
@@ -237,6 +261,65 @@ function App() {
     
     return () => {
       if (audioContextRef.current) audioContextRef.current.close()
+      if (vuAnimRef.current) cancelAnimationFrame(vuAnimRef.current)
+    }
+  }, [])
+
+  // IDEA 4: VU Meter — animar niveles desde el AnalyserNode
+  useEffect(() => {
+    if (!isPlaying) {
+      setVuLevels(Array(8).fill(0))
+      if (vuAnimRef.current) cancelAnimationFrame(vuAnimRef.current)
+      return
+    }
+    const freqData = new Uint8Array(analyserRef.current ? analyserRef.current.frequencyBinCount : 128)
+    const animateVU = () => {
+      if (!analyserRef.current) return
+      analyserRef.current.getByteFrequencyData(freqData)
+      const binSize = Math.floor(freqData.length / 8)
+      const levels = Array.from({ length: 8 }, (_, i) => {
+        let sum = 0
+        for (let j = i * binSize; j < (i + 1) * binSize; j++) sum += freqData[j]
+        return Math.min(1, (sum / binSize) / 200)
+      })
+      setVuLevels(levels)
+      vuAnimRef.current = requestAnimationFrame(animateVU)
+    }
+    vuAnimRef.current = requestAnimationFrame(animateVU)
+    return () => { if (vuAnimRef.current) cancelAnimationFrame(vuAnimRef.current) }
+  }, [isPlaying])
+
+  // IDEA 2: Cargar preset de localStorage al iniciar
+  useEffect(() => {
+    // No sobreescribir al inicio, solo exponer la función de carga
+  }, [])
+
+  const savePreset = (slot) => {
+    localStorage.setItem(`biosync_preset_${slot}`, JSON.stringify(params))
+    console.log(`Preset ${slot} guardado.`)
+  }
+
+  const loadPreset = (slot) => {
+    const raw = localStorage.getItem(`biosync_preset_${slot}`)
+    if (!raw) return
+    try {
+      const saved = JSON.parse(raw)
+      setParams(p => ({ ...p, ...saved }))
+    } catch(e) {
+      console.error('Error cargando preset:', e)
+    }
+  }
+
+  // IDEA 3: Tap Tempo
+  const handleTapTempo = useCallback(() => {
+    const now = Date.now()
+    tapsRef.current.push(now)
+    if (tapsRef.current.length > 8) tapsRef.current.shift()
+    if (tapsRef.current.length > 1) {
+      const intervals = tapsRef.current.slice(1).map((t, i) => t - tapsRef.current[i])
+      const avgMs = intervals.reduce((a, b) => a + b) / intervals.length
+      const newBpm = Math.round(Math.max(60, Math.min(180, 60000 / avgMs)))
+      setParams(p => ({ ...p, bpm: newBpm }))
     }
   }, [])
 
@@ -593,6 +676,9 @@ function App() {
       const scheduleNote = (beatNumber, time) => {
         const currentParams = paramsRef.current;
         
+        // IDEA 1: Registrar el paso actual para el indicador visual
+        currentStepRef.current = beatNumber
+
         // Mute Global por Paso
         if (currentParams.global_mute_pattern && currentParams.global_mute_pattern[beatNumber] === 1) {
           return;
@@ -679,8 +765,19 @@ function App() {
         schedulerState.current.current16thNote = (schedulerState.current.current16thNote + 1) % 16
       }
 
+      // IDEA 1: RAF para sincronizar currentStepRef → state React sin bloquear el audio thread
+      let stepRafId = null
+      const syncStepToUI = () => {
+        setCurrentStep(currentStepRef.current)
+        stepRafId = requestAnimationFrame(syncStepToUI)
+      }
+      stepRafId = requestAnimationFrame(syncStepToUI)
+
       const scheduler = () => {
-        if (!audioContextRef.current || !sourceRef.current) return 
+        if (!audioContextRef.current || !sourceRef.current) {
+          if (stepRafId) cancelAnimationFrame(stepRafId)
+          return
+        }
         if (!paramsRef.current.midi_slave) {
           while (schedulerState.current.nextNoteTime < audioContextRef.current.currentTime + 0.1) {
             scheduleNote(schedulerState.current.current16thNote, schedulerState.current.nextNoteTime)
@@ -707,6 +804,8 @@ function App() {
     setIsPlaying(false)
     isPlayingRef.current = false
     midiTicksCountRef.current = 0
+    setCurrentStep(-1)
+    currentStepRef.current = -1
     if (sourceRef.current) {
       if (schedulerState.current.timerID) clearTimeout(schedulerState.current.timerID)
       try { sourceRef.current.stop() } catch(e){}
@@ -830,32 +929,79 @@ function App() {
         case '3': setParams(p => ({...p, mute_hihat: !p.mute_hihat})); break;
         case '4': setParams(p => ({...p, mute_glitch: !p.mute_glitch})); break;
         case '5': setParams(p => ({...p, mute_bass: !p.mute_bass})); break;
-        case 'r':
+        case 'r': {
           const recBtn = document.getElementById('rec-btn');
           const stopRecBtn = document.getElementById('stop-rec-btn');
           if (recBtn && !recBtn.disabled) recBtn.click();
           else if (stopRecBtn && !stopRecBtn.disabled) stopRecBtn.click();
           break;
-        case 'c':
+        }
+        case 'c': {
           const chaosBtn = document.getElementById('chaos-btn');
           if (chaosBtn) chaosBtn.click();
+          break;
+        }
+        // IDEA 3: Tap Tempo con tecla T
+        case 't':
+          handleTapTempo();
+          break;
+        // IDEA 6: Toggle Perform Mode con tecla P
+        case 'p':
+          setPerformMode(v => !v);
           break;
       }
     };
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [handleTapTempo]);
+
+  // IDEA 4: VU Meter component (inline)
+  const VUMeter = () => (
+    <div style={{ display: 'flex', gap: '3px', alignItems: 'flex-end', height: '32px', padding: '0 0.5rem' }}>
+      {vuLevels.map((lvl, i) => (
+        <div key={i} style={{
+          width: '10px',
+          height: `${Math.max(4, lvl * 32)}px`,
+          background: lvl > 0.75 ? '#ff4444' : lvl > 0.5 ? '#ffaa00' : '#00ffcc',
+          borderRadius: '2px 2px 0 0',
+          transition: 'height 0.05s ease, background 0.1s ease',
+          boxShadow: lvl > 0.1 ? `0 0 6px ${lvl > 0.75 ? '#ff444488' : '#00ffcc66'}` : 'none'
+        }} />
+      ))}
+    </div>
+  )
 
   return (
     <div className="app-container">
-      <header className="header">
-        <h1 className="mono">BIOSYNC DSP / VISUALIZER</h1>
-        <p>Matriz de Resonancia | Estética Glitch (Raster-Noton) | Interfaz Web Audio</p>
+      <header className="header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h1 className="mono">BIOSYNC DSP / VISUALIZER</h1>
+          <p>Matriz de Resonancia | Estética Glitch (Raster-Noton) | Interfaz Web Audio</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* IDEA 4: VU Meter en el header */}
+          <VUMeter />
+          {/* IDEA 6: Botón Perform Mode */}
+          <button
+            onClick={() => setPerformMode(v => !v)}
+            title="Modo Perform [P]: oculta panel de control"
+            style={{
+              background: performMode ? '#ff440022' : '#00ffcc11',
+              color: performMode ? '#ff4444' : '#00ffcc',
+              border: `1px solid ${performMode ? '#ff4444' : '#00ffcc'}`,
+              padding: '6px 14px', borderRadius: '4px', cursor: 'pointer',
+              fontFamily: 'monospace', fontSize: '0.7rem', fontWeight: 'bold',
+              letterSpacing: '0.05em', transition: 'all 0.2s'
+            }}
+          >
+            {performMode ? '[ EXIT PERFORM ]' : '[ PERFORM ]'}
+          </button>
+        </div>
       </header>
       
       <main className="main-content">
-        <aside className="control-panel mono">
+        <aside className="control-panel mono" style={{ display: performMode ? 'none' : undefined }}>
           <div className="control-group" style={{ width: '100%' }}>
             <label style={{color: 'var(--accent)', marginBottom: '0.8rem', display: 'block'}}>Panel Principal de Perillas</label>
             <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -978,16 +1124,75 @@ function App() {
               <div style={{ fontSize: '0.65rem', color: '#aaa', marginTop: '0.5rem' }}>Master = Domina Hardware | Slave = Obedece Hardware</div>
             </div>
             
+            {/* IDEA 2: Presets localStorage */}
+            <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', marginTop: '1rem' }}>
+              <strong style={{color: 'var(--accent)', display: 'block', marginBottom: '0.6rem'}}>💾 Presets (localStorage)</strong>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                {[1,2,3,4,5].map(slot => (
+                  <button
+                    key={slot}
+                    onClick={() => savePreset(slot)}
+                    title={`Guardar Preset ${slot}`}
+                    style={{
+                      background: '#111', color: '#00ffcc', border: '1px solid #333',
+                      borderRadius: '3px', padding: '4px 0', fontSize: '0.65rem',
+                      cursor: 'pointer', fontFamily: 'monospace', transition: 'all 0.15s'
+                    }}
+                  >SAVE {slot}</button>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.3rem' }}>
+                {[1,2,3,4,5].map(slot => (
+                  <button
+                    key={slot}
+                    onClick={() => loadPreset(slot)}
+                    title={`Cargar Preset ${slot}`}
+                    style={{
+                      background: localStorage.getItem(`biosync_preset_${slot}`) ? '#00ffcc22' : '#111',
+                      color: localStorage.getItem(`biosync_preset_${slot}`) ? '#00ffcc' : '#555',
+                      border: `1px solid ${localStorage.getItem(`biosync_preset_${slot}`) ? '#00ffcc55' : '#222'}`,
+                      borderRadius: '3px', padding: '4px 0', fontSize: '0.65rem',
+                      cursor: 'pointer', fontFamily: 'monospace', transition: 'all 0.15s'
+                    }}
+                  >LOAD {slot}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* IDEA 3: Tap Tempo */}
+            <div style={{ padding: '0.8rem 1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <button
+                id="tap-tempo-btn"
+                onClick={handleTapTempo}
+                style={{
+                  flex: 1, background: '#1a1a1a', color: '#ffaa00',
+                  border: '2px solid #ffaa0066', borderRadius: '4px',
+                  padding: '10px 0', fontSize: '0.75rem', fontFamily: 'monospace',
+                  fontWeight: 'bold', cursor: 'pointer', letterSpacing: '0.1em',
+                  transition: 'all 0.1s', userSelect: 'none'
+                }}
+                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.96)'}
+                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                TAP TEMPO [T]
+              </button>
+              <span style={{ color: '#ffaa00', fontFamily: 'monospace', fontSize: '0.8rem', minWidth: '55px', textAlign: 'right' }}>
+                {Math.round(params.bpm)} BPM
+              </span>
+            </div>
+
             <div style={{ padding: '1rem', background: '#222', borderRadius: '4px', border: '1px solid #444', marginTop: '1rem' }}>
               <strong style={{color: 'var(--accent)'}}>Atajos de Teclado:</strong><br/>
               - <kbd>ESPACIO</kbd>: Play / Stop<br/>
               - <kbd>1</kbd> a <kbd>5</kbd>: Mutear Pistas (Kick, Snare, Hihat, Glitch, Bass)<br/>
               - <kbd>M</kbd>: Mutear / Desmutear TODAS las pistas<br/>
               - <kbd>R</kbd>: Iniciar / Detener Grabación (Loop)<br/>
-              - <kbd>C</kbd>: Disparar Caos Euclidiano
+              - <kbd>C</kbd>: Disparar Caos Euclidiano<br/>
+              - <kbd>T</kbd>: Tap Tempo<br/>
+              - <kbd>P</kbd>: Modo Perform (pantalla limpia)
             </div>
             
-            <SequencerGrid params={params} setParams={setParams} />
+            <SequencerGrid params={params} setParams={setParams} currentStep={currentStep} />
           </div>
           
           <div className="control-group">
@@ -1111,26 +1316,64 @@ function App() {
         </aside>
         
         <section className="visualizer-container" style={{ position: 'relative' }}>
-          <div className="status-overlay mono" style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem' }}>
+          <div className="status-overlay mono" style={{ display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem', flexWrap: 'wrap' }}>
             <span>{isPlaying ? (isRecording ? "STATUS: LIVE RECORDING" : "STATUS: ANALYZING AUDIO STREAM") : "STATUS: IDLE"}</span>
-            <button
-              onClick={() => setIsVisualsActive(v => !v)}
-              style={{
-                background: isVisualsActive ? '#00ffcc22' : '#33333388',
-                color: isVisualsActive ? '#00ffcc' : '#666',
-                border: `1px solid ${isVisualsActive ? '#00ffcc' : '#555'}`,
-                padding: '2px 10px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '0.65rem',
-                fontFamily: 'monospace',
-                fontWeight: 'bold',
-                letterSpacing: '0.05em',
-                transition: 'all 0.2s'
-              }}
-            >
-              {isVisualsActive ? '[ VIS: ON ]' : '[ VIS: OFF ]'}
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {/* IDEA 6: controles mínimos en Perform Mode */}
+              {performMode && (
+                <>
+                  <button
+                    onClick={isPlaying ? stopAudio : generateAndPlay}
+                    style={{
+                      background: isPlaying ? '#ff444422' : '#00ffcc22',
+                      color: isPlaying ? '#ff4444' : '#00ffcc',
+                      border: `1px solid ${isPlaying ? '#ff4444' : '#00ffcc'}`,
+                      padding: '4px 12px', borderRadius: '4px', cursor: 'pointer',
+                      fontFamily: 'monospace', fontSize: '0.7rem', fontWeight: 'bold'
+                    }}
+                  >
+                    {isPlaying ? '[ STOP ]' : '[ PLAY ]'}
+                  </button>
+                  <span style={{ color: '#ffaa00', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                    {Math.round(params.bpm)} BPM
+                  </span>
+                  {/* Mini mute buttons */}
+                  {['beat','snare','hihat','glitch','bass'].map(track => (
+                    <button
+                      key={track}
+                      onClick={() => setParams(p => ({...p, [`mute_${track}`]: !p[`mute_${track}`]}))}
+                      style={{
+                        background: params[`mute_${track}`] ? '#ff444422' : '#00ffcc11',
+                        color: params[`mute_${track}`] ? '#ff4444' : '#00ffcc88',
+                        border: `1px solid ${params[`mute_${track}`] ? '#ff4444' : '#333'}`,
+                        padding: '2px 6px', borderRadius: '3px', cursor: 'pointer',
+                        fontFamily: 'monospace', fontSize: '0.6rem', transition: 'all 0.15s'
+                      }}
+                    >
+                      {track.toUpperCase()}
+                    </button>
+                  ))}
+                </>
+              )}
+              <button
+                onClick={() => setIsVisualsActive(v => !v)}
+                style={{
+                  background: isVisualsActive ? '#00ffcc22' : '#33333388',
+                  color: isVisualsActive ? '#00ffcc' : '#666',
+                  border: `1px solid ${isVisualsActive ? '#00ffcc' : '#555'}`,
+                  padding: '2px 10px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.65rem',
+                  fontFamily: 'monospace',
+                  fontWeight: 'bold',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {isVisualsActive ? '[ VIS: ON ]' : '[ VIS: OFF ]'}
+              </button>
+            </div>
           </div>
           <div 
             ref={chaosPadRef}

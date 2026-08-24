@@ -3,6 +3,7 @@ import { useRef } from 'react'
 const Knob = ({ label, value, min, max, onChange, onMidiLearn, midiLearnActive }) => {
   const startY = useRef(0)
   const startVal = useRef(0)
+  const lastUpdate = useRef(0)
   const pct = (value - min) / (max - min)
   const deg = -135 + (pct * 270)
 
@@ -14,6 +15,10 @@ const Knob = ({ label, value, min, max, onChange, onMidiLearn, midiLearnActive }
   }
 
   const handleMove = (e) => {
+    const now = Date.now()
+    if (now - lastUpdate.current < 30) return
+    lastUpdate.current = now
+
     const deltaY = startY.current - e.clientY
     const deltaVal = (deltaY / 150) * (max - min)
     let newVal = startVal.current + deltaVal
@@ -52,3 +57,4 @@ const Knob = ({ label, value, min, max, onChange, onMidiLearn, midiLearnActive }
 }
 
 export default Knob
+

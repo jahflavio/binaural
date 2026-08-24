@@ -10,6 +10,21 @@ from engine import BioSyncEngine
 
 app = FastAPI(title="BioSync DSP Server", description="Motor de audio para mecanotransducción y frecuencias somáticas")
 
+# Caché de one-shots generados una sola vez al iniciar el servidor
+# Kick se cachea por kick_freq (variable), el resto son fijos.
+_ONESHOT_CACHE = {}
+
+def _get_oneshot_wav(key: str, generator_fn) -> bytes:
+    """Genera y cachea el buffer WAV de un one-shot si no existe aún."""
+    if key not in _ONESHOT_CACHE:
+        engine = BioSyncEngine()
+        layer = generator_fn(engine)
+        layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
+        buf = io.BytesIO()
+        wavfile.write(buf, engine.sample_rate, layer_16)
+        _ONESHOT_CACHE[key] = buf.getvalue()
+    return _ONESHOT_CACHE[key]
+
 # Configurar CORS para permitir peticiones desde el frontend (React/Vite)
 app.add_middleware(
     CORSMiddleware,
@@ -56,12 +71,12 @@ def generate_audio(
     # Parsear patrones (str a list de enteros)
     try:
         kick_arr = [int(x) for x in kick_pattern.split(",")]
-    except:
+    except ValueError:
         kick_arr = [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]
         
     try:
         glitch_arr = [int(x) for x in glitch_pattern.split(",")]
-    except:
+    except ValueError:
         glitch_arr = [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0]
         
     # 2. Capa Beats
@@ -131,12 +146,12 @@ async def process_audio(
     # Parsear patrones (str a list de enteros)
     try:
         kick_arr = [int(x) for x in kick_pattern.split(",")]
-    except:
+    except ValueError:
         kick_arr = [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0]
         
     try:
         glitch_arr = [int(x) for x in glitch_pattern.split(",")]
-    except:
+    except ValueError:
         glitch_arr = [1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0]
         
     # 3. Generar las capas sintéticas para acompañar
@@ -161,47 +176,28 @@ async def process_audio(
 
 @app.get("/generate/kick")
 def generate_kick_oneshot(kick_freq: float = 55.5):
-    # Genera solo 1 golpe de bombo (0.5s)
-    engine = BioSyncEngine()
-    layer = engine.generate_beat_layer(duration=0.5, kick_freq=kick_freq, pattern=[1])
-    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
-    buffer = io.BytesIO()
-    wavfile.write(buffer, engine.sample_rate, layer_16)
-    buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="audio/wav")
+    """One-shot de bombo. Cacheado por kick_freq para minimizar latencia."""
+    cache_key = f"kick_{round(kick_freq, 2)}"
+    wav_bytes = _get_oneshot_wav(cache_key, lambda e: e.generate_beat_layer(duration=0.6, kick_freq=kick_freq, pattern=[1]))
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 @app.get("/generate/glitch")
 def generate_glitch_oneshot():
-    # Genera solo 1 golpe de glitch (0.2s)
-    engine = BioSyncEngine()
-    layer = engine.generate_glitch_layer(duration=0.2, pattern=[1])
-    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
-    buffer = io.BytesIO()
-    wavfile.write(buffer, engine.sample_rate, layer_16)
-    buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="audio/wav")
+    """One-shot de glitch. Cacheado."""
+    wav_bytes = _get_oneshot_wav("glitch", lambda e: e.generate_glitch_layer(duration=0.3, pattern=[1]))
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 @app.get("/generate/snare")
 def generate_snare_oneshot():
-    # Genera solo 1 golpe de snare (0.25s) + padding
-    engine = BioSyncEngine()
-    layer = engine.generate_snare_layer(duration=0.3, pattern=[1])
-    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
-    buffer = io.BytesIO()
-    wavfile.write(buffer, engine.sample_rate, layer_16)
-    buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="audio/wav")
+    """One-shot de snare. duration=0.5s para que el buffer sea mayor que el sample (fix BUG snare silencioso)."""
+    wav_bytes = _get_oneshot_wav("snare", lambda e: e.generate_snare_layer(duration=0.5, pattern=[1]))
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 @app.get("/generate/hihat")
 def generate_hihat_oneshot():
-    # Genera solo 1 golpe de hihat (0.1s) + padding
-    engine = BioSyncEngine()
-    layer = engine.generate_hihat_layer(duration=0.2, pattern=[1])
-    layer_16 = np.int16(np.clip(layer, -1.0, 1.0) * 32767.0)
-    buffer = io.BytesIO()
-    wavfile.write(buffer, engine.sample_rate, layer_16)
-    buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="audio/wav")
+    """One-shot de hihat. Cacheado."""
+    wav_bytes = _get_oneshot_wav("hihat", lambda e: e.generate_hihat_layer(duration=0.25, pattern=[1]))
+    return Response(content=wav_bytes, media_type="audio/wav")
 
 @app.get("/generate/drone")
 def generate_drone(
